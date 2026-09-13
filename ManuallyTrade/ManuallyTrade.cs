@@ -22,12 +22,8 @@ public class ManuallyTrade : Robot {
 
     private PdhpdlOrderExecutor _orderExecutor;
 
-    // Optimisation only: GetFitness checks the whole run year by year, and GetFitnessArgs does not
-    // carry the window, so the robot has to remember where it started.
-    private DateTime _optimisationWindowStart;
 
     protected override void OnStart() {
-        _optimisationWindowStart = Server.Time;
         LaunchDebug();
 
         var riskGuard = new PdhpdlRiskGuard();
@@ -46,9 +42,7 @@ public class ManuallyTrade : Robot {
         }
     }
 
-    protected override void OnBar() {
-        _orderExecutor?.CancelExpiredPendingOrders(Bars.Count - 2);
-    }
+    protected override void OnBar() { }
 
     protected override void OnStop() {
         Print("*****cBot stopped.*******************");

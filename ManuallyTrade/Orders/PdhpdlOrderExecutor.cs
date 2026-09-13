@@ -67,45 +67,6 @@ public class PdhpdlOrderExecutor {
         return _robot.PendingOrders.Any(order => order.SymbolName == _symbolName);
     }
 
-    // 挂单是「等价格回撤」，回撤没来就说明这笔已经作废：只给它 PendingOrderExpiryBars
-    // 根收盘 K 线的时间，超时撤单，避免行情早已走远后挂单还在原地等着被扫。
-    public void CancelExpiredPendingOrders(int closedBarIndex) {
-        ForgetFilledPendingOrders();
-
-        foreach (PendingOrder order in _robot.PendingOrders.Where(IsStrategyPendingOrder).ToArray()) {
-            if (!IsPendingOrderExpired(order, closedBarIndex))
-                continue;
-
-            CancelPendingOrder(order, $"unfilled after {PendingOrderExpiryBars} bars");
-        }
-    }
-
-    private bool IsPendingOrderExpired(PendingOrder order, int closedBarIndex) {
-        // 本次运行之前就存在的挂单没有下单 K 线记录，不归这条规则管。
-        if (!_pendingOrderBarIndexById.TryGetValue(order.Id, out int placedBarIndex))
-            return false;
-
-        return closedBarIndex - placedBarIndex >= PendingOrderExpiryBars;
-    }
-
-    private void ForgetFilledPendingOrders() {
-        HashSet<int> liveOrderIds = new(_robot.PendingOrders.Select(order => order.Id));
-
-        foreach (int orderId in _pendingOrderBarIndexById.Keys.Where(id => !liveOrderIds.Contains(id)).ToArray())
-            _pendingOrderBarIndexById.Remove(orderId);
-    }
-
-    private void CancelPendingOrder(PendingOrder order, string reason) {
-        TradeResult result = _robot.CancelPendingOrder(order);
-
-        if (!result.IsSuccessful) {
-            _robot.Print("*****Pending cancel failed | Order: {0}, Reason: {1}, Error: {2}", order.Id, reason, result.Error);
-            return;
-        }
-
-        _pendingOrderBarIndexById.Remove(order.Id);
-        _robot.Print("*****Pending order cancelled | Order: {0}, Reason: {1}", order.Id, reason);
-    }
 
     private bool ExecutePlan(PdhpdlOrderPlanModel planModel) {
         _robot.Print(
@@ -125,10 +86,6 @@ public class PdhpdlOrderExecutor {
         _pendingOrderBarIndexById[result.PendingOrder.Id] = planModel.SignalBarIndex;
         _robot.Print("*****Order submitted | Label: {0}", planModel.Label);
         return true;
-    }
-
-    private bool IsStrategyPendingOrder(PendingOrder order) {
-        return order.SymbolName == _symbolName && !string.IsNullOrWhiteSpace(order.Label) && order.Label.StartsWith(StrategyLabelPrefix);
     }
 
     private static TradeType ToTradeType(PdhpdlTradeDirectionModel directionModel) {
