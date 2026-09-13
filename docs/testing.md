@@ -16,7 +16,8 @@ Test files mirror the source folders, one test class per class under test:
 
 ```
 tests/Pdhpdl.Tests/
-  Orders/   PdhpdlOrderPlannerTests.cs
+  Orders/   PdhpdlOrderPlannerTests.cs   planner validation and rejections
+            PositionSizingTests.cs       lot size for realistic XAUUSD / EURUSD settings
 ```
 
 Each namespace mirrors its folder (e.g. `Pdhpdl.Tests.Orders`), so the test explorer groups
@@ -50,7 +51,7 @@ dotnet test "tests/Pdhpdl.Tests/Pdhpdl.Tests.csproj"
 Expected tail of the output:
 
 ```text
-Passed!  - Failed: 0, Passed: 14, Skipped: 0, Total: 14
+Passed!  - Failed: 0, Passed: 19, Skipped: 0, Total: 19
 ```
 
 ## Useful variations
