@@ -47,20 +47,6 @@ public class ManuallyTrade : Robot {
         _orderExecutor?.CancelExpiredPendingOrders(Bars.Count - 2);
     }
 
-    // Called once per pass by the desktop Optimisation tab only — a plain backtest, CLI or GUI,
-    // never calls it. Passes with a losing (or idle) calendar year sink below every survivor;
-    // survivors keep cTrader's own score. See AnnualFitness.
-    protected override double GetFitness(GetFitnessArgs args) {
-        List<ClosedTradeModel> closedTrades = args.History
-            .Select(trade => new ClosedTradeModel(trade.ClosingTime, trade.NetProfit)).ToList();
-
-        var stats = new FitnessStatsModel {
-            NetProfit = args.NetProfit, WinningTrades = args.WinningTrades, MaxEquityDrawdownPercent = args.MaxEquityDrawdownPercentages
-        };
-
-        return new AnnualFitness(_optimisationWindowStart, Server.Time).Calculate(closedTrades, stats);
-    }
-
     protected override void OnStop() {
         Print("*****cBot stopped.*******************");
     }
