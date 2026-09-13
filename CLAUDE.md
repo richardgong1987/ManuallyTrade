@@ -15,13 +15,10 @@ pieces together (the composition root).
 Behavior classes live beside the feature they serve; all data types live in `Models/`
 (suffixed `Model`):
 
-- `Signals/` — `PdhpdlSignalDetector` (reads the closed bar + previous-day levels and applies
-  the PDH/PDL false-breakout predicates), `PdhpdlSignal` (data).
 - `Orders/` — `PdhpdlOrderPlanner` (pure sizing/geometry, unit tested) talks to the broker
   only through the `IPdhpdlSymbolModel` port; `PdhpdlOrderExecutor` gates on risk/exposure,
   submits orders, and cancels stale pending orders.
 - `Risk/` — `PdhpdlRiskGuard` (time/news/weekend windows + risk-money, pure, unit tested).
-- `LineDrawer/` — `PdhpdlLines`, `PdhpdlSignalMarkers` (chart drawing).
 - `Models/` — data types: `PdhpdlOrderPlanModel`, `PdhpdlTradeDirectionModel`,
   `NewsBlackoutWindowModel`, the `IPdhpdlSymbolModel` port, and its `CAlgoSymbolModel`
   adapter (the one Models/ file that references `cAlgo.API`).
@@ -30,18 +27,6 @@ Rule of thumb: classes with no `using cAlgo.API` are pure and testable; keep the
 `CAlgoSymbolModel` is the sole broker adapter — it is the only Models/ file that touches
 cAlgo, and it is never linked into the test project. The design rationale lives in
 `docs/design/refactor-structure.md`.
-
-## Harami rule
-
-Harami is intentionally implemented as an inside-bar breakout. With candles ordered
-`current [0]`, `previous [1]`, `earlier [2]`, the earlier candle must strictly contain the
-previous candle. A current close above `previous.High` is Buy; a current close below
-`previous.Low` is Sell; otherwise it is None. Candle body direction is irrelevant.
-
-Do not restore the obsolete implementation that made the previous candle contain current
-and reversed the parent body's direction. `HaramiSingle` drives entries; `HaramiDouble`
-currently mirrors it for legacy compatibility and is not consumed by the order detector.
-The authoritative details and numeric examples are in `docs/design/hanjin-signals-26.md`.
 
 ## Build & run
 

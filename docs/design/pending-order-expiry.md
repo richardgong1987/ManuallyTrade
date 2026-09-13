@@ -54,7 +54,7 @@ via the "symbol already has a pending order" gate.
   the bar limit constant, and the cancel call. The rule lives here because it is bookkeeping
   over live broker state, not a pattern rule.
 - Composition root: the robot only calls `CancelExpiredPendingOrders` from `OnBar`.
-- No change to the pure layers (`PdhpdlOrderPlanner`, `PdhpdlRiskGuard`, `MainBiz`).
+- No change to the pure layers (`PdhpdlOrderPlanner`, `PdhpdlRiskGuard`).
 
 ## 8. Dependencies
 
@@ -63,7 +63,7 @@ via the "symbol already has a pending order" gate.
 ## 9. External Details
 
 cTrader `Robot.PendingOrders` and `Robot.CancelPendingOrder`. Bar index comes from
-`Bars.Count - 2`, the same closed-bar convention `PdhpdlSignalDetector` uses.
+`Bars.Count - 2`, the last fully closed bar when `OnBar` fires.
 
 ## 10. Test Strategy
 
