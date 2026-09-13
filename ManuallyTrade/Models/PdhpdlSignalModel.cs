@@ -24,6 +24,4 @@ public class PdhpdlSignalModel {
     public string Label { get; set; }
 
     public double SL { get; set; }
-
-    public bool IsBigK { get; set; }
 }

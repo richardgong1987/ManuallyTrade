@@ -114,11 +114,6 @@ public class PdhpdlOrderPlanner {
     }
 
     private static double GetEntryPrice(PdhpdlSignalModel signalModel, double stop, PdhpdlTradeDirectionModel directionModel) {
-        // 大 K 线：挂在止损价与该 K 线反向端的中点——多单取最高价、空单取最低价，
-        // 也就是回撤到这根大 K 线的一半再进场，而不是追它的收盘价。
-        if (signalModel.IsBigK)
-            return (stop + GetFavourableExtreme(signalModel, directionModel)) / 2.0;
-
         double closeEntry = signalModel.Close;
         double distanceToStop = Math.Abs(closeEntry - stop);
 
@@ -126,10 +121,5 @@ public class PdhpdlOrderPlanner {
             return closeEntry - distanceToStop * PullbackRatio;
 
         return closeEntry + distanceToStop * PullbackRatio;
-    }
-
-    // 顺着盈利方向的那一端：多单在上（最高价），空单在下（最低价）。
-    private static double GetFavourableExtreme(PdhpdlSignalModel signalModel, PdhpdlTradeDirectionModel directionModel) {
-        return directionModel == PdhpdlTradeDirectionModel.Long ? signalModel.High : signalModel.Low;
     }
 }
