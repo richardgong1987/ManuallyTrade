@@ -5,7 +5,7 @@ namespace cAlgo.Robots;
 
 [Robot(TimeZone = TimeZones.TokyoStandardTime, AccessRights = AccessRights.None, AddIndicators = false)]
 public class ManuallyTrade : Robot {
-    [Parameter("风险1%", DefaultValue = 0, MinValue = 0, Group = "空1")]
+    [Parameter("空1风险%", DefaultValue = 0, MinValue = 0, Group = "空1")]
     public double Short1RiskPct { get; set; }
 
     [Parameter("空1入场价", DefaultValue = 0, MinValue = 0, Group = "空1")]
