@@ -16,13 +16,11 @@ Test files mirror the source folders, one test class per class under test:
 
 ```
 tests/Pdhpdl.Tests/
-  Risk/     PdhpdlRiskGuardTests.cs
-  Signals/  HanJinSignals26Tests.cs
   Orders/   PdhpdlOrderPlannerTests.cs
 ```
 
-Each namespace mirrors its folder (`Pdhpdl.Tests.Risk`, `.Signals`, `.Orders`), so the test
-explorer groups tests by the area they cover.
+Each namespace mirrors its folder (e.g. `Pdhpdl.Tests.Orders`), so the test explorer groups
+tests by the area they cover.
 
 ## Prerequisites
 
@@ -52,7 +50,7 @@ dotnet test "tests/Pdhpdl.Tests/Pdhpdl.Tests.csproj"
 Expected tail of the output:
 
 ```text
-Passed!  - Failed: 0, Passed: 24, Skipped: 0, Total: 24
+Passed!  - Failed: 0, Passed: 14, Skipped: 0, Total: 14
 ```
 
 ## Useful variations
@@ -70,13 +68,13 @@ dotnet test "tests/Pdhpdl.Tests/Pdhpdl.Tests.csproj" \
 
 # Run one test method by name
 dotnet test "tests/Pdhpdl.Tests/Pdhpdl.Tests.csproj" \
-  --filter "Name=sizes_short_close_entry_geometry"
+  --filter "Name=rounds_volume_down_so_a_stop_out_never_exceeds_the_budget"
 ```
 
 ## Adding tests for new logic
 
 1. Keep the new logic pure (no `cAlgo.API`, no I/O, no `DateTime.Now`).
-2. Put the test in the folder that matches the source area (`Risk/`, `Signals/`, `Orders/`),
+2. Put the test in the folder that matches the source area (e.g. `Orders/`),
    in a class named after the unit under test (e.g. `PdhpdlOrderPlannerTests`), and name each
    test by behavior (e.g. `rejects_when_capped_volume_is_below_broker_minimum`).
 3. If the class under test (or a pure data type it needs) lives in a new file, link it in the
