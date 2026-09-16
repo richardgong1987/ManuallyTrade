@@ -86,7 +86,6 @@ public class ManuallyTrade : Robot {
     private PdhpdlSignalMarkers _signalMarkers;
     private PdhpdlOrderExecutor _orderExecutor;
     private PdhpdlTradeCsvLogger _csvLogger;
-    private DateTime _optimisationWindowStart;
 
     protected override void OnStart() {
         // A blank label would make every "_L"/"_S" label on the symbol look like this bot's order.
@@ -96,7 +95,6 @@ public class ManuallyTrade : Robot {
             return;
         }
 
-        _optimisationWindowStart = Server.Time;
         LaunchDebug();
 
         List<TradeLevelModel> tradeLevels = BuildTradeLevels();
@@ -186,18 +184,4 @@ public class ManuallyTrade : Robot {
     }
 
     protected override void OnBarClosed() { }
-
-    // Called once per pass by the desktop Optimisation tab only — a plain backtest, CLI or GUI,
-    // never calls it. Passes with a losing (or idle) calendar year sink below every survivor;
-    // survivors keep cTrader's own score. See AnnualFitness.
-    protected override double GetFitness(GetFitnessArgs args) {
-        List<ClosedTradeModel> closedTrades = args.History
-            .Select(trade => new ClosedTradeModel(trade.ClosingTime, trade.NetProfit)).ToList();
-
-        var stats = new FitnessStatsModel {
-            NetProfit = args.NetProfit, WinningTrades = args.WinningTrades, MaxEquityDrawdownPercent = args.MaxEquityDrawdownPercentages
-        };
-
-        return new AnnualFitness(_optimisationWindowStart, Server.Time).Calculate(closedTrades, stats);
-    }
 }
