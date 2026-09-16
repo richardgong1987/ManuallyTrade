@@ -12,12 +12,6 @@ public class ManuallyTrade : Robot {
     [Parameter("订单标签", DefaultValue = "ManuallyTrade-label")]
     public string OrderLabel { get; set; }
 
-    [Parameter("每笔交易风险百分比，默认1%", DefaultValue = 1.0, MinValue = 0.1, MaxValue = 10.0, Step = 0.1, Group = "风控配置")]
-    public double RiskPct { get; set; }
-
-    [Parameter("止盈目标", DefaultValue = 2.0, MinValue = 0.5, MaxValue = 20.0, Step = 0.1, Group = "风控配置")]
-    public double TakeProfitR { get; set; }
-
     [Parameter("启动时清空交易记录CSV", DefaultValue = false, Group = "开发调试")]
     public bool ResetTradeLogOnStart { get; set; }
 
@@ -104,20 +98,45 @@ public class ManuallyTrade : Robot {
 
         _optimisationWindowStart = Server.Time;
         LaunchDebug();
-        Bars dailyBars = MarketData.GetBars(TimeFrame.Daily, SymbolName);
 
-        _signalDetector = new PdhpdlSignalDetector(Bars, dailyBars);
+        List<TradeLevelModel> tradeLevels = BuildTradeLevels();
+        PrintConfiguredLevels(tradeLevels);
+
+        _signalDetector = new PdhpdlSignalDetector(Bars, tradeLevels);
         _signalMarkers = new PdhpdlSignalMarkers(Chart, Symbol.TickSize);
 
         _csvLogger = new PdhpdlTradeCsvLogger(ResetTradeLogOnStart, ResolveReportsDirectory(), FileName);
         Print("****CSV logger path: {0}", _csvLogger.FilePath);
 
         var riskGuard = new PdhpdlRiskGuard();
-        var planner = new PdhpdlOrderPlanner(new CAlgoSymbolModel(Symbol), riskGuard, TakeProfitR, RiskPct);
+        var planner = new PdhpdlOrderPlanner(new CAlgoSymbolModel(Symbol), riskGuard);
         _orderExecutor = new PdhpdlOrderExecutor(this, SymbolName, Bars.TimeFrame.ToString(), OrderLabel.Trim(), planner, riskGuard,
             _csvLogger);
         DrawPdhpdlLines();
         Print("*****PDH/PDL Break and Reverse started.");
+    }
+
+    // 手工输入的六档价位。价格或风险百分比留 0 的那一档不参与判断（见 TradeLevelModel）。
+    private List<TradeLevelModel> BuildTradeLevels() {
+        return new List<TradeLevelModel> {
+            new("Short1", SignalSideModel.Sell, PDH1, Short1RiskPct, Short1TPPrice),
+            new("Short2", SignalSideModel.Sell, PDH2, Short2RiskPct, Short2TPPrice),
+            new("Short3", SignalSideModel.Sell, PDH3, Short3RiskPct, Short3TPPrice),
+            new("Long1", SignalSideModel.Buy, PDL1, Long1RiskPct, Long1TPPrice),
+            new("Long2", SignalSideModel.Buy, PDL2, Long2RiskPct, Long2TPPrice),
+            new("Long3", SignalSideModel.Buy, PDL3, Long3RiskPct, Long3TPPrice)
+        };
+    }
+
+    // 全都没配置就等于这个 cBot 不会下任何单，启动时说清楚，免得以为是信号没出。
+    private void PrintConfiguredLevels(List<TradeLevelModel> tradeLevels) {
+        foreach (TradeLevelModel level in tradeLevels.Where(level => level.IsConfigured)) {
+            Print("*****Level configured | Name: {0}, Side: {1}, Price: {2}, RiskPct: {3}, TakeProfitR: {4}", level.Name, level.Side,
+                level.Price, level.RiskPct, level.TakeProfitR);
+        }
+
+        if (!tradeLevels.Any(level => level.IsConfigured))
+            Print("*****No trade level configured. Set both 入场价 and 风险% on at least one level, or this cBot will never trade.");
     }
 
     private void DrawPdhpdlLines() {
@@ -153,13 +172,12 @@ public class ManuallyTrade : Robot {
         HandleClosedBarSignal();
     }
 
+    // 一根 K 线可能同时命中几档价位，每一档各自下单、各自画标记。
     private void HandleClosedBarSignal() {
-        PdhpdlSignalModel signalModel = _signalDetector.DetectOnClosedBar();
-        if (!signalModel.HasData)
-            return;
-
-        if (_orderExecutor.ExecuteIfSignal(signalModel)) {
-            _signalMarkers.Draw(signalModel);
+        foreach (PdhpdlSignalModel signalModel in _signalDetector.DetectOnClosedBar()) {
+            if (_orderExecutor.ExecuteIfSignal(signalModel)) {
+                _signalMarkers.Draw(signalModel);
+            }
         }
     }
 

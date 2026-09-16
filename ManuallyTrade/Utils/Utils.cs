@@ -14,42 +14,14 @@ public class Utils {
         return candle.Low <= level && candle.High >= level;
     }
 
-    // 上方一组关键价位：日线 PDH。
-    public static PdhpdlKeyLevelModel[] PdhLevels(PdhpdlSignalModel signalModel) {
-        return new[] { new PdhpdlKeyLevelModel("Pdl1", signalModel.Pdl1), new PdhpdlKeyLevelModel("Pdh1", signalModel.Pdh1), };
+    // 看跌确认：touchCandles 里有 K 线接触到该价位，且收盘价低于该价位。
+    public static bool TouchesAndClosesBelow(double level, double closePrice, params CandleModel[] touchCandles) {
+        return AnyBarTouchesLevel(level, touchCandles) && closePrice < level;
     }
 
-    // 下方一组关键价位：日线 PDL。
-    public static PdhpdlKeyLevelModel[] PdlLevels(PdhpdlSignalModel signalModel) {
-        return new[] { new PdhpdlKeyLevelModel("Pdl1", signalModel.Pdl1), new PdhpdlKeyLevelModel("Pdh1", signalModel.Pdh1), };
-    }
-
-    // 看跌确认：K线接触到该价位，且收盘价低于该价位。返回第一个命中的价位名。
-    public static bool TryFindSellKeyLevel(PdhpdlKeyLevelModel[] levels, double closePrice, CandleModel[] touchCandles,
-        out string keyLevel) {
-        foreach (PdhpdlKeyLevelModel level in levels) {
-            if (level.IsConfigured && AnyBarTouchesLevel(level.Price, touchCandles) && closePrice < level.Price) {
-                keyLevel = level.Name;
-                return true;
-            }
-        }
-
-        keyLevel = "";
-        return false;
-    }
-
-    // 看涨确认：K线接触到该价位，且收盘价高于该价位。返回第一个命中的价位名。
-    public static bool TryFindBuyKeyLevel(PdhpdlKeyLevelModel[] levels, double closePrice, CandleModel[] touchCandles,
-        out string keyLevel) {
-        foreach (PdhpdlKeyLevelModel level in levels) {
-            if (level.IsConfigured && AnyBarTouchesLevel(level.Price, touchCandles) && closePrice > level.Price) {
-                keyLevel = level.Name;
-                return true;
-            }
-        }
-
-        keyLevel = "";
-        return false;
+    // 看涨确认：touchCandles 里有 K 线接触到该价位，且收盘价高于该价位。
+    public static bool TouchesAndClosesAbove(double level, double closePrice, params CandleModel[] touchCandles) {
+        return AnyBarTouchesLevel(level, touchCandles) && closePrice > level;
     }
 
     public static bool AnyBarIsLong(params CandleModel[] candles) {

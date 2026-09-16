@@ -23,13 +23,12 @@ public class PdhpdlSignalMarkers {
     }
 
     public void Draw(PdhpdlSignalModel signalModel) {
-        if (signalModel == null || !signalModel.HasData)
+        if (signalModel?.Level == null)
             return;
 
-        if (signalModel.IsLongSignal)
+        if (signalModel.Level.Side == SignalSideModel.Buy)
             DrawLong(signalModel);
-
-        if (signalModel.IsShortSignal)
+        else
             DrawShort(signalModel);
     }
 
@@ -97,7 +96,8 @@ public class PdhpdlSignalMarkers {
         _objectNames.Remove(name);
     }
 
+    // 一根 K 线可能同时命中几档，所以 key 要带上档位名，否则几个标记会互相覆盖。
     private static string GetKey(PdhpdlSignalModel signalModel) {
-        return signalModel.BarTime.ToString("yyyyMMdd_HHmmss");
+        return $"{signalModel.BarTime:yyyyMMdd_HHmmss}_{signalModel.Level.Name}";
     }
 }

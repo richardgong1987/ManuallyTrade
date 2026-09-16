@@ -15,8 +15,9 @@ public class PdhpdlOrderExecutor {
     private readonly string _symbolName;
     private readonly string _timeFrame;
 
-    // Orders are labelled "{OrderLabel}_L" / "{OrderLabel}_S". The side suffix keeps long and short
-    // orders apart in the per-label CSV maps; the prefix marks this instance's orders, so manual
+    // Orders are labelled "{OrderLabel}_{level name}", e.g. "ManuallyTrade-label_Short1". The level
+    // suffix is what keeps the six levels independent — each one gates on its own label, so several
+    // can hold a position at the same time. The prefix marks this instance's orders, so manual
     // trades and other bots on the same symbol are ignored.
     private readonly string _strategyLabelPrefix;
 
@@ -45,10 +46,7 @@ public class PdhpdlOrderExecutor {
     }
 
     public bool ExecuteIfSignal(PdhpdlSignalModel signalModel) {
-        if (signalModel == null || !signalModel.HasData)
-            return false;
-
-        if (!signalModel.IsLongSignal && !signalModel.IsShortSignal)
+        if (signalModel?.Level == null)
             return false;
 
         if (_riskGuard.ShouldBlockNewOrder(_robot.Server.Time)) {
@@ -56,35 +54,38 @@ public class PdhpdlOrderExecutor {
             return false;
         }
 
-        if (HasStrategyPosition()) {
-            _robot.Print("*****Order skipped | Label {0}* already has an open position on symbol: {1}",
-                _strategyLabelPrefix, _symbolName);
+        string label = _strategyLabelPrefix + signalModel.Level.Name;
+
+        if (HasPositionForLevel(label)) {
+            _robot.Print("*****Order skipped | Level {0} already has an open position on symbol: {1}",
+                signalModel.Level.Name, _symbolName);
             return false;
         }
 
         PdhpdlOrderPlanModel planModel = _planner.CreatePlan(signalModel, _robot.Account.Equity);
 
         if (!planModel.IsValid) {
-            _robot.Print("*****Order rejected | Reason: {0}", planModel.RejectReason);
+            _robot.Print("*****Order rejected | Level: {0}, Reason: {1}", signalModel.Level.Name, planModel.RejectReason);
             return false;
         }
 
-        planModel.Label = _strategyLabelPrefix + (planModel.DirectionModel == PdhpdlTradeDirectionModel.Long ? "L" : "S");
+        planModel.Label = label;
         planModel.SignalName = signalModel.Label;
-        planModel.KeyLevel = signalModel.KeyLevel;
+        planModel.KeyLevel = signalModel.Level.Name;
 
         return ExecutePlan(planModel);
     }
 
+    // Gates on the level's own label, so the other levels stay free to open their own position.
     // Checks live broker state rather than in-memory maps, so a restart does not stack a second order.
-    private bool HasStrategyPosition() {
-        return _robot.Positions.Any(IsStrategyPosition);
+    private bool HasPositionForLevel(string label) {
+        return _robot.Positions.Any(position => position.SymbolName == _symbolName && position.Label == label);
     }
 
     private bool ExecutePlan(PdhpdlOrderPlanModel planModel) {
         _robot.Print(
-            "*****Order plan | Side: {0}, Entry: {1}, Stop: {2}, TakeProfit: {3}, RiskPrice: {4}, StopLossPips: {5}, RiskMoney: {6}, EstimatedRiskMoney: {7}, Lots: {8}, VolumeUnits: {9}",
-            planModel.DirectionModel, planModel.EntryPrice, planModel.StopPrice, planModel.TakeProfitPrice,
+            "*****Order plan | Level: {0}, Side: {1}, Entry: {2}, Stop: {3}, TakeProfit: {4}, RiskPrice: {5}, StopLossPips: {6}, RiskMoney: {7}, EstimatedRiskMoney: {8}, Lots: {9}, VolumeUnits: {10}",
+            planModel.KeyLevel, planModel.DirectionModel, planModel.EntryPrice, planModel.StopPrice, planModel.TakeProfitPrice,
             planModel.RiskPrice, planModel.StopLossPips, planModel.RiskMoney, planModel.EstimatedRiskMoney, planModel.Lots,
             planModel.VolumeInUnits);
 

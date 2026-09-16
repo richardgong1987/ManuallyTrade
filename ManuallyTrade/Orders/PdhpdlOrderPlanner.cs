@@ -6,26 +6,25 @@ namespace cAlgo.Robots;
 // IPdhpdlSymbolModel port and PdhpdlRiskGuard, never on cAlgo, so it is unit tested.
 //
 // Sizing: volume = riskMoney / riskPrice, rounded to the nearest tradable step, so a
-// stop-out loses as close to the risk budget (e.g. 1% of equity) as the step allows.
+// stop-out loses as close to the risk budget as the step allows. 风险预算与止盈倍数都来自
+// 信号命中的那一档价位（见 TradeLevelModel），每一档各用各的。
 public class PdhpdlOrderPlanner {
     private readonly IPdhpdlSymbolModel _symbolModel;
     private readonly PdhpdlRiskGuard _riskGuard;
-    private readonly double _takeProfitR;
-    private readonly double _riskPct;
 
-    public PdhpdlOrderPlanner(IPdhpdlSymbolModel symbolModel, PdhpdlRiskGuard riskGuard, double takeProfitR, double riskPct) {
+    public PdhpdlOrderPlanner(IPdhpdlSymbolModel symbolModel, PdhpdlRiskGuard riskGuard) {
         _symbolModel = symbolModel;
         _riskGuard = riskGuard;
-        _takeProfitR = takeProfitR;
-        _riskPct = riskPct;
     }
 
     public PdhpdlOrderPlanModel CreatePlan(PdhpdlSignalModel signalModel, double accountEquity) {
         PdhpdlOrderPlanModel planModel = new();
+        TradeLevelModel level = signalModel.Level;
 
         PdhpdlTradeDirectionModel directionModel =
-            signalModel.IsLongSignal ? PdhpdlTradeDirectionModel.Long : PdhpdlTradeDirectionModel.Short;
-        FillGeometry(signalModel, directionModel, out double entry, out double stop, out double riskPrice, out double takeProfit);
+            level.Side == SignalSideModel.Buy ? PdhpdlTradeDirectionModel.Long : PdhpdlTradeDirectionModel.Short;
+        FillGeometry(signalModel, directionModel, level.TakeProfitR, out double entry, out double stop, out double riskPrice,
+            out double takeProfit);
         double stopLossPips = riskPrice / _symbolModel.PipSize;
 
         if (_riskGuard.TryGetStopLossPipsRejectReason(stopLossPips, out string rejectReason)) {
@@ -34,7 +33,7 @@ public class PdhpdlOrderPlanner {
         }
 
         double takeProfitPips = Math.Abs(takeProfit - entry) / _symbolModel.PipSize;
-        double riskMoney = _riskGuard.CalculateRiskMoney(accountEquity, _riskPct);
+        double riskMoney = _riskGuard.CalculateRiskMoney(accountEquity, level.RiskPct);
 
         // Volume whose loss at the stop equals the risk budget, snapped to the nearest tradable
         // step. lossPerUnit uses PipValue (account-currency value of a pip), so the budget stays
@@ -55,19 +54,19 @@ public class PdhpdlOrderPlanner {
         return planModel;
     }
 
-    private void FillGeometry(PdhpdlSignalModel signalModel, PdhpdlTradeDirectionModel directionModel, out double entry, out double stop,
-        out double riskPrice, out double takeProfit) {
-        // The stop sits exactly on the signal's SL price — the pattern-specific level the detector
-        // chose — and the entry is the signal bar's close, since every order is a market order.
-        stop = signalModel.SL;
+    private static void FillGeometry(PdhpdlSignalModel signalModel, PdhpdlTradeDirectionModel directionModel, double takeProfitR,
+        out double entry, out double stop, out double riskPrice, out double takeProfit) {
+        // The stop sits exactly on the signal's stop-loss price — the pattern-specific level the
+        // detector chose — and the entry is the signal bar's close, since every order is a market order.
+        stop = signalModel.StopLoss;
         entry = signalModel.Close;
 
         if (directionModel == PdhpdlTradeDirectionModel.Long) {
             riskPrice = entry - stop;
-            takeProfit = entry + _takeProfitR * riskPrice;
+            takeProfit = entry + takeProfitR * riskPrice;
         } else {
             riskPrice = stop - entry;
-            takeProfit = entry - _takeProfitR * riskPrice;
+            takeProfit = entry - takeProfitR * riskPrice;
         }
     }
 
