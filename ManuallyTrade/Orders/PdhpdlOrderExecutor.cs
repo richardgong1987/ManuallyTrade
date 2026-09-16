@@ -5,13 +5,11 @@ using cAlgo.API;
 namespace cAlgo.Robots;
 
 // Places and tracks the strategy's cTrader orders. It gates on the risk guard and open
-// exposure, asks PdhpdlOrderPlanner to size the order, submits it, and keeps the CSV
-// row ids so opens and closes can be reconciled. All sizing math lives in the planner.
+// exposure, asks PdhpdlOrderPlanner to size the order, submits it as a market order, and
+// keeps the CSV row ids so opens and closes can be reconciled. All sizing math lives in
+// the planner.
 public class PdhpdlOrderExecutor {
     private const string EntryComment = "ENTRY";
-
-    // 挂单最多等 3 根收盘 K 线；等不到回撤就撤单。
-    private const int PendingOrderExpiryBars = 3;
 
     private readonly Robot _robot;
     private readonly string _symbolName;
@@ -26,9 +24,6 @@ public class PdhpdlOrderExecutor {
     private readonly PdhpdlRiskGuard _riskGuard;
     private readonly PdhpdlTradeCsvLogger _csvLogger;
 
-    private readonly Dictionary<string, string> _pendingCsvIdsByLabel = new();
-    private readonly Dictionary<string, double> _pendingEntryEquitiesByLabel = new();
-    private readonly Dictionary<int, int> _pendingOrderBarIndexById = new();
     private readonly Dictionary<int, string> _positionCsvIds = new();
     private readonly Dictionary<int, double> _positionEntryEquities = new();
 
@@ -42,20 +37,11 @@ public class PdhpdlOrderExecutor {
         _riskGuard = riskGuard;
         _csvLogger = csvLogger;
 
-        if (_riskGuard.NewsBlackoutWindowCount > 0)
-            _robot.Print("*****News blackout windows loaded. Count: {0}", _riskGuard.NewsBlackoutWindowCount);
-
         _robot.Positions.Closed += OnPositionClosed;
-        _robot.Positions.Opened += OnPositionOpened;
     }
 
     public void Stop() {
         _robot.Positions.Closed -= OnPositionClosed;
-        _robot.Positions.Opened -= OnPositionOpened;
-    }
-
-    public void ManageOpenPositions() {
-        CloseExposureBeforeRiskWindow();
     }
 
     public bool ExecuteIfSignal(PdhpdlSignalModel signalModel) {
@@ -70,8 +56,8 @@ public class PdhpdlOrderExecutor {
             return false;
         }
 
-        if (HasStrategyOrderOrPosition()) {
-            _robot.Print("*****Order skipped | Label {0}* already has a pending order or open position on symbol: {1}",
+        if (HasStrategyPosition()) {
+            _robot.Print("*****Order skipped | Label {0}* already has an open position on symbol: {1}",
                 _strategyLabelPrefix, _symbolName);
             return false;
         }
@@ -86,86 +72,19 @@ public class PdhpdlOrderExecutor {
         planModel.Label = _strategyLabelPrefix + (planModel.DirectionModel == PdhpdlTradeDirectionModel.Long ? "L" : "S");
         planModel.SignalName = signalModel.Label;
         planModel.KeyLevel = signalModel.KeyLevel;
-        planModel.SignalBarIndex = signalModel.BarIndex;
 
         return ExecutePlan(planModel);
     }
 
     // Checks live broker state rather than in-memory maps, so a restart does not stack a second order.
-    private bool HasStrategyOrderOrPosition() {
-        return _robot.PendingOrders.Any(IsStrategyPendingOrder) || _robot.Positions.Any(IsStrategyPosition);
-    }
-
-    // 大 K 线的挂单是「等价格回撤到中点」，回撤没来就说明这笔已经作废：只给它 PendingOrderExpiryBars
-    // 根收盘 K 线的时间，超时撤单，避免行情早已走远后挂单还在原地等着被扫。
-    public void CancelExpiredPendingOrders(int closedBarIndex) {
-        ForgetFilledPendingOrders();
-
-        foreach (PendingOrder order in _robot.PendingOrders.Where(IsStrategyPendingOrder).ToArray()) {
-            if (!IsPendingOrderExpired(order, closedBarIndex))
-                continue;
-
-            CancelPendingOrder(order, $"unfilled after {PendingOrderExpiryBars} bars");
-        }
-    }
-
-    private bool IsPendingOrderExpired(PendingOrder order, int closedBarIndex) {
-        // 本次运行之前就存在的挂单没有下单 K 线记录，不归这条规则管。
-        if (!_pendingOrderBarIndexById.TryGetValue(order.Id, out int placedBarIndex))
-            return false;
-
-        return closedBarIndex - placedBarIndex >= PendingOrderExpiryBars;
-    }
-
-    private void ForgetFilledPendingOrders() {
-        HashSet<int> liveOrderIds = new(_robot.PendingOrders.Select(order => order.Id));
-
-        foreach (int orderId in _pendingOrderBarIndexById.Keys.Where(id => !liveOrderIds.Contains(id)).ToArray())
-            _pendingOrderBarIndexById.Remove(orderId);
-    }
-
-    private void CancelPendingOrder(PendingOrder order, string reason) {
-        TradeResult result = _robot.CancelPendingOrder(order);
-
-        if (!result.IsSuccessful) {
-            _robot.Print("*****Pending cancel failed | Order: {0}, Reason: {1}, Error: {2}", order.Id, reason, result.Error);
-            return;
-        }
-
-        ForgetCancelledPendingOrder(order);
-        _robot.Print("*****Pending order cancelled | Order: {0}, Reason: {1}", order.Id, reason);
-    }
-
-    // 撤单后必须把这笔挂单的 CSV 行号/权益/ATR 一起丢掉，否则同 label 的下一笔持仓会认领到它的旧记录。
-    private void ForgetCancelledPendingOrder(PendingOrder order) {
-        _pendingOrderBarIndexById.Remove(order.Id);
-
-        if (_robot.PendingOrders.Any(other => other.Id != order.Id && other.Label == order.Label))
-            return;
-
-        _pendingCsvIdsByLabel.Remove(order.Label);
-        _pendingEntryEquitiesByLabel.Remove(order.Label);
-    }
-
-    private void CloseExposureBeforeRiskWindow() {
-        if (!_riskGuard.ShouldForceClose(_robot.Server.Time))
-            return;
-
-        foreach (PendingOrder order in _robot.PendingOrders.Where(IsStrategyPendingOrder).ToArray())
-            CancelPendingOrder(order, "risk guard force close");
-
-        foreach (Position position in _robot.Positions.Where(IsStrategyPosition).ToArray()) {
-            TradeResult result = _robot.ClosePosition(position);
-
-            if (!result.IsSuccessful)
-                _robot.Print("*****Risk guard close failed | Position: {0}, Error: {1}", position.Id, result.Error);
-        }
+    private bool HasStrategyPosition() {
+        return _robot.Positions.Any(IsStrategyPosition);
     }
 
     private bool ExecutePlan(PdhpdlOrderPlanModel planModel) {
         _robot.Print(
-            "*****Order plan | Side: {0}, EntryMode: {1}, Entry: {2}, Stop: {3}, TakeProfit: {4}, RiskPrice: {5}, StopLossPips: {6}, RiskMoney: {7}, EstimatedRiskMoney: {8}, Lots: {9}, VolumeUnits: {10}",
-            planModel.DirectionModel, planModel.EntryModel, planModel.EntryPrice, planModel.StopPrice, planModel.TakeProfitPrice,
+            "*****Order plan | Side: {0}, Entry: {1}, Stop: {2}, TakeProfit: {3}, RiskPrice: {4}, StopLossPips: {5}, RiskMoney: {6}, EstimatedRiskMoney: {7}, Lots: {8}, VolumeUnits: {9}",
+            planModel.DirectionModel, planModel.EntryPrice, planModel.StopPrice, planModel.TakeProfitPrice,
             planModel.RiskPrice, planModel.StopLossPips, planModel.RiskMoney, planModel.EstimatedRiskMoney, planModel.Lots,
             planModel.VolumeInUnits);
 
@@ -177,24 +96,12 @@ public class PdhpdlOrderExecutor {
         }
 
         _robot.Print("*****Order submitted | Label: {0}", planModel.Label);
-
-        if (planModel.IsMarketOrder) {
-            return RecordMarketEntry(planModel, result.Position);
-        }
-
-        return RecordPendingEntry(planModel, result.PendingOrder);
+        return RecordMarketEntry(planModel, result.Position);
     }
 
     private TradeResult SubmitOrder(PdhpdlOrderPlanModel planModel) {
-        TradeType tradeType = ToTradeType(planModel.DirectionModel);
-
-        if (planModel.IsMarketOrder) {
-            return _robot.ExecuteMarketOrder(tradeType, _symbolName, planModel.VolumeInUnits, planModel.Label, planModel.StopLossPips,
-                planModel.TakeProfitPips, EntryComment);
-        }
-
-        return _robot.PlaceLimitOrder(tradeType, _symbolName, planModel.VolumeInUnits, planModel.EntryPrice, planModel.Label,
-            planModel.StopLossPips, planModel.TakeProfitPips, ProtectionType.Relative, null, EntryComment);
+        return _robot.ExecuteMarketOrder(ToTradeType(planModel.DirectionModel), _symbolName, planModel.VolumeInUnits, planModel.Label,
+            planModel.StopLossPips, planModel.TakeProfitPips, EntryComment);
     }
 
     private bool RecordMarketEntry(PdhpdlOrderPlanModel planModel, Position position) {
@@ -207,34 +114,6 @@ public class PdhpdlOrderExecutor {
         _positionEntryEquities[position.Id] = planModel.AccountEquity;
         _robot.Print("*****CSV trade record added. Path: {0}", _csvLogger.FilePath);
         return true;
-    }
-
-    private bool RecordPendingEntry(PdhpdlOrderPlanModel planModel, PendingOrder order) {
-        string csvId = _csvLogger.AppendPendingEntry(planModel, order, _symbolName, _timeFrame);
-
-        if (string.IsNullOrWhiteSpace(csvId))
-            return false;
-
-        _pendingCsvIdsByLabel[order.Label] = csvId;
-        _pendingEntryEquitiesByLabel[order.Label] = planModel.AccountEquity;
-        _pendingOrderBarIndexById[order.Id] = planModel.SignalBarIndex;
-        _robot.Print("*****CSV pending order record added. Id: {0}, Path: {1}", csvId, _csvLogger.FilePath);
-        return true;
-    }
-
-    private void OnPositionOpened(PositionOpenedEventArgs args) {
-        if (args?.Position == null)
-            return;
-
-        if (_pendingCsvIdsByLabel.TryGetValue(args.Position.Label, out string csvId)) {
-            _positionCsvIds[args.Position.Id] = csvId;
-            _pendingCsvIdsByLabel.Remove(args.Position.Label);
-        }
-
-        if (_pendingEntryEquitiesByLabel.TryGetValue(args.Position.Label, out double entryEquity)) {
-            _positionEntryEquities[args.Position.Id] = entryEquity;
-            _pendingEntryEquitiesByLabel.Remove(args.Position.Label);
-        }
     }
 
     private void OnPositionClosed(PositionClosedEventArgs args) {
@@ -257,10 +136,6 @@ public class PdhpdlOrderExecutor {
     private bool IsStrategyPosition(Position position) {
         return position.SymbolName == _symbolName && !string.IsNullOrWhiteSpace(position.Label) &&
                position.Label.StartsWith(_strategyLabelPrefix);
-    }
-
-    private bool IsStrategyPendingOrder(PendingOrder order) {
-        return order.SymbolName == _symbolName && !string.IsNullOrWhiteSpace(order.Label) && order.Label.StartsWith(_strategyLabelPrefix);
     }
 
     private string GetPositionCsvId(Position position) {

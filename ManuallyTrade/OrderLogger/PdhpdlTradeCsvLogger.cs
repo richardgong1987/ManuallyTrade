@@ -50,7 +50,6 @@ public class PdhpdlTradeCsvLogger {
             Id = position.Id.ToString(),
             KeyLevel = planModel.KeyLevel,
             Signal = planModel.SignalName,
-            EntryMode = GetEntryModeCsvValue(planModel.EntryModel),
             Comment = "ENTRY",
             Symbol = symbolName,
             TimeFrame = timeFrame,
@@ -64,36 +63,6 @@ public class PdhpdlTradeCsvLogger {
             VolumeInUnits = position.VolumeInUnits,
             PositionId = position.Id.ToString(),
             DealId = GetOpenDealId(position)
-        };
-
-        Append(record);
-        return record.Id;
-    }
-
-    public string AppendPendingEntry(PdhpdlOrderPlanModel planModel, PendingOrder order, string symbolName, string timeFrame) {
-        if (planModel == null || order == null)
-            return "";
-
-        string keyLevel = planModel.DirectionModel == PdhpdlTradeDirectionModel.Long ? "PDL" : "PDH";
-        string csvId = order.Id.ToString();
-
-        var record = new PdhpdlTradeCsvRecordModel {
-            Id = csvId,
-            KeyLevel = keyLevel,
-            Signal = "false-breakout",
-            EntryMode = GetEntryModeCsvValue(planModel.EntryModel),
-            Comment = "ENTRY",
-            Symbol = symbolName,
-            TimeFrame = timeFrame,
-            EntryAccountEquity = planModel.AccountEquity,
-            CloseAccountEquity = 0.0,
-            EntryTime = order.SubmittedTime,
-            EntryPrice = order.TargetPrice,
-            StopPrice = planModel.StopPrice,
-            TakeProfitPrice = planModel.TakeProfitPrice,
-            RiskPrice = planModel.RiskPrice,
-            VolumeInUnits = order.VolumeInUnits,
-            PendingOrderId = csvId
         };
 
         Append(record);
@@ -115,7 +84,6 @@ public class PdhpdlTradeCsvLogger {
             Id = GetCloseRecordId(csvId, reason),
             KeyLevel = "",
             Signal = "close",
-            EntryMode = "",
             Comment = position.NetProfit >= 0.0 ? "盈利" : "亏损",
             Symbol = symbolName,
             TimeFrame = timeFrame,
@@ -144,7 +112,7 @@ public class PdhpdlTradeCsvLogger {
             return;
 
         string line = string.Join(",", Escape(recordModel.Id), Escape(recordModel.KeyLevel), Escape(recordModel.Signal),
-            Escape(recordModel.EntryMode), Escape(recordModel.Comment), Escape(recordModel.Symbol), Escape(recordModel.TimeFrame),
+            Escape(recordModel.Comment), Escape(recordModel.Symbol), Escape(recordModel.TimeFrame),
             Escape(recordModel.EntryTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)),
             Escape(recordModel.EntryPrice.ToString(CultureInfo.InvariantCulture)), Escape(FormatOptionalNumber(recordModel.ClosePrice)),
             Escape(recordModel.StopPrice.ToString(CultureInfo.InvariantCulture)),
@@ -153,7 +121,7 @@ public class PdhpdlTradeCsvLogger {
             Escape(recordModel.VolumeInUnits.ToString(CultureInfo.InvariantCulture)), Escape(recordModel.CloseReason),
             Escape(FormatOptionalNumber(recordModel.EntryAccountEquity)), Escape(FormatOptionalNumber(recordModel.CloseAccountEquity)),
             Escape(recordModel.ProfitLoss.ToString(CultureInfo.InvariantCulture)), Escape(recordModel.CloseTime),
-            Escape(recordModel.PendingOrderId), Escape(recordModel.PositionId), Escape(recordModel.DealId));
+            Escape(recordModel.PositionId), Escape(recordModel.DealId));
         System.IO.File.AppendAllText(_filePath, line + Environment.NewLine, CsvEncoding);
     }
 
@@ -180,8 +148,8 @@ public class PdhpdlTradeCsvLogger {
 
     private static string BuildHeader() {
         // "多空" (Side) 字段已废弃，从当前表头中移除。历史文件由 PdhpdlTradeCsvMigrator 升级时会剥离该列。
-        return string.Join(",", "编号", "关键位", "信号", "回撤开仓模式", "备注", "交易品种", "时间周期", "入场时间", "入场价格", "平仓价格", "止损价格", "止盈价格", "风险价格距离", "下单数量",
-            "平仓原因", "开仓账户权益", "平仓账户权益", "平仓盈亏", "平仓时间", "挂单ID", "持仓ID", "成交ID");
+        return string.Join(",", "编号", "关键位", "信号", "备注", "交易品种", "时间周期", "入场时间", "入场价格", "平仓价格", "止损价格", "止盈价格", "风险价格距离", "下单数量",
+            "平仓原因", "开仓账户权益", "平仓账户权益", "平仓盈亏", "平仓时间", "持仓ID", "成交ID");
     }
 
     private static string FormatOptionalNumber(double value) {
@@ -237,16 +205,4 @@ public class PdhpdlTradeCsvLogger {
         return position.Deals[position.Deals.Count - 1].Id.ToString();
     }
 
-    private static string GetEntryModeCsvValue(PdhpdlEntryModel entryModel) {
-        switch (entryModel) {
-            case PdhpdlEntryModel.Pb25:
-                return "回撤25入场";
-            case PdhpdlEntryModel.Pb382:
-                return "回撤38.2入场";
-            case PdhpdlEntryModel.Pb50:
-                return "回撤50入场";
-            default:
-                return "收线入场";
-        }
-    }
 }

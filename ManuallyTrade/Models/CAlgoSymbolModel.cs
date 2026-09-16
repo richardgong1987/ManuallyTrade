@@ -12,7 +12,6 @@ public class CAlgoSymbolModel : IPdhpdlSymbolModel {
         _symbol = symbol;
     }
 
-    public double TickSize => _symbol.TickSize;
     public double PipSize => _symbol.PipSize;
     public double LotSize => _symbol.LotSize;
     public double VolumeInUnitsMin => _symbol.VolumeInUnitsMin;

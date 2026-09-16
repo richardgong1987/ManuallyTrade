@@ -9,8 +9,6 @@ public class PdhpdlTradeCsvRecordModel {
 
     public string Signal { get; set; }
 
-    public string EntryMode { get; set; }
-
     public string Comment { get; set; }
 
     public string Symbol { get; set; }
@@ -40,8 +38,6 @@ public class PdhpdlTradeCsvRecordModel {
     public double ProfitLoss { get; set; }
 
     public string CloseTime { get; set; }
-
-    public string PendingOrderId { get; set; }
 
     public string PositionId { get; set; }
 

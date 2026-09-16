@@ -30,6 +30,4 @@ public class PdhpdlSignalModel {
     public string KeyLevel { get; set; }
 
     public double SL { get; set; }
-
-    public bool IsBigK { get; set; }
 }

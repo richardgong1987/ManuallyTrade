@@ -8,10 +8,17 @@ namespace cAlgo.Robots;
 // history of older layouts (fewer columns, equity columns in different positions, per-pullback
 // entry-mode columns) and rewrites old rows in place. Pure string work, no cAlgo dependency.
 public static class PdhpdlTradeCsvMigrator {
-    // 波动/趋势状态列（ATR_Ratio_H1 起的那一串）已全部废弃，当前 schema 回到它们加入之前的 22 列。
-    private const int CurrentColumnCount = 22;
+    // 「回撤开仓模式」与「挂单ID」两列已废弃（只剩市价单，没有挂单，也没有回撤模式可选），
+    // 当前 schema 是 20 列。
+    private const int CurrentColumnCount = 20;
 
-    // 曾经在末尾带过那些状态列的历史 schema。列序从未变过，截掉末尾多出来的部分即可回到当前布局。
+    // 归一用的中间布局：去掉末尾那串波动/趋势状态列之后、尚未去掉上面两列的 22 列。
+    // 所有历史布局都先收敛到它，再由 RemoveDroppedColumns 落到当前的 20 列。
+    private const int BusinessColumnCount = 22;
+    private const int EntryModeColumnIndex = 3;
+    private const int PendingOrderIdColumnIndex = 19;
+
+    // 曾经在末尾带过那些状态列的历史 schema。列序从未变过，截掉末尾多出来的部分即可回到 22 列布局。
     // 24 列同时也是更早的 OldColumnCountBeforeSingleTakeProfit 布局，只能靠表头区分（见 MigrateRows）。
     private const int ColumnCountWithAtrState = 24;
     private const int ColumnCountWithDmsState = 27;
@@ -74,28 +81,46 @@ public static class PdhpdlTradeCsvMigrator {
             if (columns.Length == CurrentColumnCount)
                 continue;
 
+            // 上一版的 22 列布局：只差「回撤开仓模式」「挂单ID」两列没去掉。
+            if (columns.Length == BusinessColumnCount) {
+                lines[i] = string.Join(",", RemoveDroppedColumns(columns));
+                continue;
+            }
+
             // 末尾带着已废弃状态列的近期 schema：截掉多出来的部分即可，前 22 列的列序没有变过。
             // 24 列同时也是更早的 OldColumnCountBeforeSingleTakeProfit 布局，所以要看表头。
             if (columns.Length == ColumnCountWithDmsState || columns.Length == ColumnCountWithAdxPreviousState ||
                 columns.Length == ColumnCountWithGapX || columns.Length == ColumnCountWithShortGapX ||
                 (columns.Length == ColumnCountWithAtrState && isHeaderBeforeDmsState)) {
-                lines[i] = string.Join(",", TrimToCurrentColumns(columns));
+                lines[i] = string.Join(",", RemoveDroppedColumns(TrimToBusinessColumns(columns)));
                 continue;
             }
 
             string[] withSide = NormalizeToWithSideLayout(columns, isPreviousWithSideHeader);
 
             // 只有成功归一到 "含 Side 的 23 列布局" 才剥离 Side 列；无法识别长度的行保持原样，
-            // 与旧逻辑一致（旧代码对未命中任何分支的行也不改动）。剥离后正好是当前的 22 列。
+            // 与旧逻辑一致（旧代码对未命中任何分支的行也不改动）。剥离 Side 后正好是 22 列布局。
             if (withSide.Length == ColumnCountWithSide)
-                lines[i] = string.Join(",", RemoveSideColumn(withSide));
+                lines[i] = string.Join(",", RemoveDroppedColumns(RemoveSideColumn(withSide)));
         }
     }
 
-    private static string[] TrimToCurrentColumns(string[] columns) {
-        string[] trimmed = new string[CurrentColumnCount];
-        Array.Copy(columns, trimmed, CurrentColumnCount);
+    private static string[] TrimToBusinessColumns(string[] columns) {
+        string[] trimmed = new string[BusinessColumnCount];
+        Array.Copy(columns, trimmed, BusinessColumnCount);
         return trimmed;
+    }
+
+    // 从 22 列布局里删掉两列已废弃的列。先删靠后的那一列，前面那一列的下标才不会被挪动。
+    private static string[] RemoveDroppedColumns(string[] businessColumns) {
+        return RemoveColumnAt(RemoveColumnAt(businessColumns, PendingOrderIdColumnIndex), EntryModeColumnIndex);
+    }
+
+    private static string[] RemoveColumnAt(string[] columns, int index) {
+        string[] result = new string[columns.Length - 1];
+        Array.Copy(columns, result, index);
+        Array.Copy(columns, index + 1, result, index, columns.Length - index - 1);
+        return result;
     }
 
     // 把任意历史布局归一到 "含 Side 的 23 列布局"，随后由 RemoveSideColumn 统一剥离 Side。
