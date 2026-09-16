@@ -102,8 +102,6 @@ public class ManuallyTrade : Robot {
         LaunchDebug();
         DrawDualRmaLines();
         _atr14 = new Atr14Series(Indicators, Bars);
-        _marketStructure = new MarketStructure(Chart, Bars, ZigZagLength);
-        _marketStructure.Update();
         Bars dailyBars = MarketData.GetBars(TimeFrame.Daily, SymbolName);
         Bars hourBars = MarketData.GetBars(TimeFrame.Hour, SymbolName);
         _atrH1 = new Atr14Series(Indicators, hourBars);
@@ -185,7 +183,6 @@ public class ManuallyTrade : Robot {
     protected override void OnBar() {
         _pdhpdlLines?.Draw();
         _movingAverageLines?.Draw();
-        _marketStructure?.Update();
         _orderExecutor?.ManageOpenPositions();
         // 先撤过期挂单再看新信号：让作废的挂单不再占住「本品种已有挂单」这个名额。
         _orderExecutor?.CancelExpiredPendingOrders(Bars.Count - 2);
