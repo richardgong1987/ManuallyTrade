@@ -17,9 +17,9 @@ public class PdhpdlOrderExecutor {
     private readonly string _symbolName;
     private readonly string _timeFrame;
 
-    // Orders are labelled "{OrderLabel}_L" / "{OrderLabel}_S". The side suffix keeps simultaneous long and
-    // short pending orders (MultiplePosition) apart in the per-label CSV maps; the prefix marks this
-    // instance's orders, so manual trades and other bots on the same symbol are ignored.
+    // Orders are labelled "{OrderLabel}_L" / "{OrderLabel}_S". The side suffix keeps long and short
+    // orders apart in the per-label CSV maps; the prefix marks this instance's orders, so manual
+    // trades and other bots on the same symbol are ignored.
     private readonly string _strategyLabelPrefix;
 
     private readonly PdhpdlOrderPlanner _planner;
@@ -70,7 +70,7 @@ public class PdhpdlOrderExecutor {
             return false;
         }
 
-        if (signalModel.Strategy != StrategyModel.MultiplePosition && HasStrategyOrderOrPosition()) {
+        if (HasStrategyOrderOrPosition()) {
             _robot.Print("*****Order skipped | Label {0}* already has a pending order or open position on symbol: {1}",
                 _strategyLabelPrefix, _symbolName);
             return false;

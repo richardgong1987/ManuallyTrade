@@ -9,9 +9,6 @@ namespace cAlgo.Robots;
 
 [Robot(TimeZone = TimeZones.TokyoStandardTime, AccessRights = AccessRights.FullAccess, AddIndicators = false)]
 public class ManuallyTrade : Robot {
-    [Parameter("策略模式", DefaultValue = StrategyModel.All)]
-    public StrategyModel Strategy { get; set; }
-
     [Parameter("订单标签", DefaultValue = "ManuallyTrade-label")]
     public string OrderLabel { get; set; }
 
@@ -54,30 +51,7 @@ public class ManuallyTrade : Robot {
     [Parameter("输出文件名", DefaultValue = "pdhpdl-trades.csv", Group = "开发调试")]
     public string FileName { get; set; }
 
-    [Parameter("均线来源", DefaultValue = MovingAverageSourceModel.HigherTimeFrame, Group = "均线")]
-    public MovingAverageSourceModel MaSource { get; set; }
-
-    [Parameter("均线周期 RMA 1 (快)", DefaultValue = 13, MinValue = 1, Group = "均线")]
-    public int MaFastPeriod { get; set; }
-
-    [Parameter("均线周期 RMA 2 (慢)", DefaultValue = 55, MinValue = 1, Group = "均线")]
-    public int MaSlowPeriod { get; set; }
-
-    [Parameter("均线周期(分钟)", DefaultValue = 120, MinValue = 1, Group = "均线")]
-    public TimeFrameSelectModel MaTimeFrameMinutes { get; set; }
-
-    // 开口扩大闸门：趋势均线的开口要「还在继续拉开」才放行（见 GapXGate）。
-    // 关闭时交易逻辑与加这个开关之前完全一致；GapX 无论开关与否都照常写进 CSV。
-    [Parameter("启用开口扩大闸门 GapX", DefaultValue = false, Group = "均线")]
-    public bool UseGapX { get; set; }
-
-    // 阈值只取 0 以上：GapX 本身可正可负，但要求开口继续收窄不是这道闸门的用途。
-    [Parameter("开口扩大阈值 GapX (ATR倍数)", DefaultValue = 0.10, MinValue = 0.0, Step = 0.05, Group = "均线")]
-    public double GapXThreshold { get; set; }
-
     private PdhpdlLines _pdhpdlLines;
-    private DualRmaSeries _rmaSeries;
-    private DualRmaLines _movingAverageLines;
     private PdhpdlSignalDetector _signalDetector;
     private PdhpdlSignalMarkers _signalMarkers;
     private PdhpdlOrderExecutor _orderExecutor;
@@ -95,13 +69,10 @@ public class ManuallyTrade : Robot {
 
         _optimisationWindowStart = Server.Time;
         LaunchDebug();
-        DrawDualRmaLines();
         _atr14 = new Atr14Series(Indicators, Bars);
         Bars dailyBars = MarketData.GetBars(TimeFrame.Daily, SymbolName);
 
-        // 快慢线与 ATR 同取趋势均线的那个 HTF 周期：GapXSeries 自己从 _rmaSeries.SourceBars 建 ATR。
-        var gapXSeries = new GapXSeries(Indicators, _rmaSeries, BuildGapXConfig());
-        _signalDetector = new PdhpdlSignalDetector(Bars, dailyBars, _rmaSeries, gapXSeries);
+        _signalDetector = new PdhpdlSignalDetector(Bars, dailyBars);
         _signalMarkers = new PdhpdlSignalMarkers(Chart, Symbol.TickSize);
 
         _csvLogger = new PdhpdlTradeCsvLogger(ResetTradeLogOnStart, ResolveReportsDirectory(), FileName);
@@ -113,13 +84,6 @@ public class ManuallyTrade : Robot {
             _csvLogger);
         DrawPdhpdlLines();
         Print("*****PDH/PDL Break and Reverse started.");
-    }
-
-    private void DrawDualRmaLines() {
-        DualRmaLinesConfigModel rmaConfig = BuildMovingAverageConfig();
-        _rmaSeries = new DualRmaSeries(MarketData, Indicators, SymbolName, Bars, rmaConfig);
-        _movingAverageLines = new DualRmaLines(Chart, Bars, _rmaSeries, rmaConfig.Thickness);
-        _movingAverageLines.Draw();
     }
 
     private void DrawPdhpdlLines() {
@@ -136,12 +100,6 @@ public class ManuallyTrade : Robot {
         }
     }
 
-    private DualRmaLinesConfigModel BuildMovingAverageConfig() {
-        return new DualRmaLinesConfigModel {
-            Source = MaSource, FastPeriod = MaFastPeriod, SlowPeriod = MaSlowPeriod, HigherTimeFrameMinutes = MaTimeFrameMinutes
-        };
-    }
-
     // 输出目录按运行模式分开、互不覆盖：回测目录由脚本每次清空重建，模拟/实盘目录只追加、从不删除。
     // 回测经 run_conditions 传入绝对路径 FileName，此目录会被忽略（见 PdhpdlTradeCsvLogger）。
     private string ResolveReportsDirectory() {
@@ -156,11 +114,6 @@ public class ManuallyTrade : Robot {
         return Account.IsLive ? "release_trading_reports" : "simulate_trading_reports";
     }
 
-    // 负阈值在这里就夹成 0：参数面板的 MinValue 管得住手输，管不住旧的参数集或优化器配置。
-    private PdhpdlGapXConfigModel BuildGapXConfig() {
-        return new PdhpdlGapXConfigModel { IsEnabled = UseGapX, Threshold = Math.Max(0.0, GapXThreshold) };
-    }
-
     private PdhpdlRiskGuardConfigModel BuildRiskGuardConfig() {
         return new PdhpdlRiskGuardConfigModel {
             RiskSafetyFactor = RiskSafetyFactor,
@@ -173,7 +126,6 @@ public class ManuallyTrade : Robot {
 
     protected override void OnBar() {
         _pdhpdlLines?.Draw();
-        _movingAverageLines?.Draw();
         _orderExecutor?.ManageOpenPositions();
         // 先撤过期挂单再看新信号：让作废的挂单不再占住「本品种已有挂单」这个名额。
         _orderExecutor?.CancelExpiredPendingOrders(Bars.Count - 2);
@@ -185,7 +137,7 @@ public class ManuallyTrade : Robot {
     }
 
     private void HandleClosedBarSignal() {
-        PdhpdlSignalModel signalModel = _signalDetector.DetectOnClosedBar(Strategy);
+        PdhpdlSignalModel signalModel = _signalDetector.DetectOnClosedBar();
         if (!signalModel.HasData)
             return;
 

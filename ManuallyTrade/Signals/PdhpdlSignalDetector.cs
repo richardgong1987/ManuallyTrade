@@ -1,4 +1,3 @@
-using System;
 using cAlgo.API;
 
 namespace cAlgo.Robots;
@@ -6,19 +5,14 @@ namespace cAlgo.Robots;
 public class PdhpdlSignalDetector {
     private readonly Bars _chartBars;
     private readonly Bars _dailyBars;
-    private readonly DualRmaSeries _rmaSeries;
-    private readonly GapXSeries _gapXSeries;
 
-    public PdhpdlSignalDetector(Bars chartBars, Bars dailyBars, DualRmaSeries rmaSeries, GapXSeries gapXSeries) {
+    public PdhpdlSignalDetector(Bars chartBars, Bars dailyBars) {
         _chartBars = chartBars;
         _dailyBars = dailyBars;
-        _rmaSeries = rmaSeries;
-        _gapXSeries = gapXSeries;
     }
 
-    public PdhpdlSignalModel DetectOnClosedBar(StrategyModel strategy) {
+    public PdhpdlSignalModel DetectOnClosedBar() {
         PdhpdlSignalModel signalModel = new();
-        signalModel.Strategy = strategy;
 
         if (_chartBars.Count < 2 || !TryGetPreviousDayLevels(out double pdh, out double pdl))
             return signalModel;
@@ -40,11 +34,6 @@ public class PdhpdlSignalDetector {
 
         signalModel.Pdl1 = pdl;
 
-        FillRmaData(signalModel);
-
-        // GapX 是进场条件之一，必须在 Evaluate 之前就位。
-        _gapXSeries.Fill(signalModel);
-
         MainBiz.Evaluate(signalModel, current, previous, earlier);
 
         return signalModel;
@@ -53,19 +42,6 @@ public class PdhpdlSignalDetector {
     private CandleModel ReadCandle(int index) {
         return new CandleModel(open: _chartBars.OpenPrices[index], high: _chartBars.HighPrices[index], low: _chartBars.LowPrices[index],
             close: _chartBars.ClosePrices[index]);
-    }
-
-    private void FillRmaData(PdhpdlSignalModel signalModel) {
-        signalModel.FastRma = double.NaN;
-        signalModel.SlowRma = double.NaN;
-
-        if (!_rmaSeries.TryGetLastConfirmedValues(out DateTime sourceBarTime, out double fastRma, out double slowRma))
-            return;
-
-        signalModel.HasRmaData = true;
-        signalModel.RmaSourceBarTime = sourceBarTime;
-        signalModel.FastRma = fastRma;
-        signalModel.SlowRma = slowRma;
     }
 
     private int PreviousDailyIndex => _dailyBars.Count - 2;
