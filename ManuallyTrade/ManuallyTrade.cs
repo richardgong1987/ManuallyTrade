@@ -1,100 +1,155 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using cAlgo.API;
 
 namespace cAlgo.Robots;
 
-[Robot(TimeZone = TimeZones.TokyoStandardTime, AccessRights = AccessRights.None, AddIndicators = false)]
+[Robot(TimeZone = TimeZones.TokyoStandardTime, AccessRights = AccessRights.FullAccess, AddIndicators = false)]
 public class ManuallyTrade : Robot {
-    [Parameter("空1风险%", DefaultValue = 0, MinValue = 0, Group = "空1")]
-    public double Short1RiskPct { get; set; }
+    [Parameter("策略模式", DefaultValue = StrategyModel.All)]
+    public StrategyModel Strategy { get; set; }
 
-    [Parameter("空1入场价", DefaultValue = 0, MinValue = 0, Group = "空1")]
-    public double Short1Price { get; set; }
+    [Parameter("订单标签", DefaultValue = "ManuallyTrade-label")]
+    public string OrderLabel { get; set; }
 
-    [Parameter("空1止盈价", DefaultValue = 0, MinValue = 0, Group = "空1")]
-    public double Short1TPPrice { get; set; }
+    [Parameter("只作多或作空模式", DefaultValue = BuyOrSellOnlyModel.All)]
+    public BuyOrSellOnlyModel BuyOrSellOnly { get; set; }
 
-    [Parameter("空1止损价", DefaultValue = 0, MinValue = 0, Group = "空1")]
-    public double Short1SLPrice { get; set; }
+    [Parameter("N次止损Lock", DefaultValue = 3, Group = "风控配置")]
+    public int Nlock { get; set; }
 
-    [Parameter("空2风险%", DefaultValue = 0, MinValue = 0, Group = "空2")]
-    public double Short2RiskPct { get; set; }
+    [Parameter("每笔交易风险百分比，默认1%", DefaultValue = 1.0, MinValue = 0.1, MaxValue = 10.0, Step = 0.1, Group = "风控配置")]
+    public double RiskPct { get; set; }
 
-    [Parameter("空2入场价", DefaultValue = 0, MinValue = 0, Group = "空2")]
-    public double Short2Price { get; set; }
+    [Parameter("风险安全系数", DefaultValue = 1.0, MinValue = 0.1, MaxValue = 1.0, Step = 0.05, Group = "风控配置")]
+    public double RiskSafetyFactor { get; set; }
 
-    [Parameter("空2止盈价", DefaultValue = 0, MinValue = 0, Group = "空2")]
-    public double Short2TPPrice { get; set; }
+    [Parameter("止损偏移点数", DefaultValue = 50, MinValue = 0, MaxValue = 1000, Group = "风控配置")]
+    public int StopOffsetTicks { get; set; }
 
-    [Parameter("空2止损价", DefaultValue = 0, MinValue = 0, Group = "空2")]
-    public double Short2SLPrice { get; set; }
+    [Parameter("最小止损点数 (Pips)", DefaultValue = 5.0, MinValue = 0.0, Step = 0.1, Group = "风控配置")]
+    public double MinStopLossPips { get; set; }
 
-    [Parameter("空3风险%", DefaultValue = 0, MinValue = 0, Group = "空3")]
-    public double Short3RiskPct { get; set; }
+    [Parameter("止盈目标", DefaultValue = 2.0, MinValue = 0.5, MaxValue = 20.0, Step = 0.1, Group = "风控配置")]
+    public double TakeProfitR { get; set; }
 
-    [Parameter("空3入场价", DefaultValue = 0, MinValue = 0, Group = "空3")]
-    public double Short3Price { get; set; }
+    [Parameter("回撤开仓模式", DefaultValue = PdhpdlEntryModel.Close, Group = "风控配置")]
+    public PdhpdlEntryModel EntryModel { get; set; }
 
-    [Parameter("空3止盈价", DefaultValue = 0, MinValue = 0, Group = "空3")]
-    public double Short3TPPrice { get; set; }
+    [Parameter("周六强制平仓小时（日本时间）", DefaultValue = 5, MinValue = 0, MaxValue = 23, Group = "基本面设置")]
+    public int SaturdayForceCloseHour { get; set; }
 
-    [Parameter("空3止损价", DefaultValue = 0, MinValue = 0, Group = "空3")]
-    public double Short3SLPrice { get; set; }
+    [Parameter("周六强制平仓分钟（日本时间）", DefaultValue = 30, MinValue = 0, MaxValue = 59, Group = "基本面设置")]
+    public int SaturdayForceCloseMinute { get; set; }
 
-    [Parameter("多1风险%", DefaultValue = 0, MinValue = 0, Group = "多1")]
-    public double Long1RiskPct { get; set; }
+    [Parameter("五星数据空仓时间段", DefaultValue = "", Group = "基本面设置")]
+    public string NewsBlackoutWindows { get; set; }
 
-    [Parameter("多1入场价", DefaultValue = 0, MinValue = 0, Group = "多1")]
-    public double Long1Price { get; set; }
+    [Parameter("启动时清空交易记录CSV", DefaultValue = false, Group = "开发调试")]
+    public bool ResetTradeLogOnStart { get; set; }
 
-    [Parameter("多1止盈价", DefaultValue = 0, MinValue = 0, Group = "多1")]
-    public double Long1TPPrice { get; set; }
-
-    [Parameter("多1止损价", DefaultValue = 0, MinValue = 0, Group = "多1")]
-    public double Long1SLPrice { get; set; }
-
-    [Parameter("多2风险%", DefaultValue = 0, MinValue = 0, Group = "多2")]
-    public double Long2RiskPct { get; set; }
-
-    [Parameter("多2入场价", DefaultValue = 0, MinValue = 0, Group = "多2")]
-    public double Long2Price { get; set; }
-
-    [Parameter("多2止盈价", DefaultValue = 0, MinValue = 0, Group = "多2")]
-    public double Long2TPPrice { get; set; }
-
-    [Parameter("多2止损价", DefaultValue = 0, MinValue = 0, Group = "多2")]
-    public double Long2SLPrice { get; set; }
-
-    [Parameter("多3风险%", DefaultValue = 0, MinValue = 0, Group = "多3")]
-    public double Long3RiskPct { get; set; }
-
-    [Parameter("多3入场价", DefaultValue = 0, MinValue = 0, Group = "多3")]
-    public double Long3Price { get; set; }
-
-    [Parameter("多3止盈价", DefaultValue = 0, MinValue = 0, Group = "多3")]
-    public double Long3TPPrice { get; set; }
-
-    [Parameter("多3止损价", DefaultValue = 0, MinValue = 0, Group = "多3")]
-    public double Long3SLPrice { get; set; }
+    [Parameter("展示调试日志", DefaultValue = false, Group = "开发调试")]
+    public bool ShowDebugLogs { get; set; }
 
     [Parameter("debug调试", DefaultValue = false, Group = "开发调试")]
     public bool IsDebug { get; set; }
 
+    [Parameter("输出文件名", DefaultValue = "pdhpdl-trades.csv", Group = "开发调试")]
+    public string FileName { get; set; }
+
+    [Parameter("均线来源", DefaultValue = MovingAverageSourceModel.HigherTimeFrame, Group = "均线")]
+    public MovingAverageSourceModel MaSource { get; set; }
+
+    [Parameter("均线周期 RMA 1 (快)", DefaultValue = 13, MinValue = 1, Group = "均线")]
+    public int MaFastPeriod { get; set; }
+
+    [Parameter("均线周期 RMA 2 (慢)", DefaultValue = 55, MinValue = 1, Group = "均线")]
+    public int MaSlowPeriod { get; set; }
+
+    [Parameter("均线周期(分钟)", DefaultValue = 120, MinValue = 1, Group = "均线")]
+    public TimeFrameSelectModel MaTimeFrameMinutes { get; set; }
+
+    // 开口扩大闸门：趋势均线的开口要「还在继续拉开」才放行（见 GapXGate）。
+    // 关闭时交易逻辑与加这个开关之前完全一致；GapX 无论开关与否都照常写进 CSV。
+    [Parameter("启用开口扩大闸门 GapX", DefaultValue = false, Group = "均线")]
+    public bool UseGapX { get; set; }
+
+    // 阈值只取 0 以上：GapX 本身可正可负，但要求开口继续收窄不是这道闸门的用途。
+    [Parameter("开口扩大阈值 GapX (ATR倍数)", DefaultValue = 0.10, MinValue = 0.0, Step = 0.05, Group = "均线")]
+    public double GapXThreshold { get; set; }
+
+    // ZigZag 突破窗口：越大结构点越少、确认越慢，结构点令牌闸门也就越紧（见 PivotEntryGate）。
+    [Parameter("ZigZag 长度", DefaultValue = 16, MinValue = 1, Group = "市场结构")]
+    public int ZigZagLength { get; set; }
+
+
+    private PdhpdlLines _pdhpdlLines;
+    private MarketStructure _marketStructure;
+    private DualRmaSeries _rmaSeries;
+    private DualRmaLines _movingAverageLines;
+    private PdhpdlSignalDetector _signalDetector;
+    private PdhpdlSignalMarkers _signalMarkers;
+    private PdhpdlOrderExecutor _orderExecutor;
+    private PdhpdlTradeCsvLogger _csvLogger;
+    private Atr14Series _atr14;
+
+    // 只为写进 CSV 的市场状态：H1 的 ATR 状态值与 DMI，日线 ATR（用于 PD_Range_ATR）。
+    private Atr14Series _atrH1;
+    private Atr14Series _atrDaily;
+    private Dms14Series _dmsH1;
+    private DateTime _optimisationWindowStart;
+
     protected override void OnStart() {
-        LaunchDebug();
-
-        var orderExecutor = new PdhpdlOrderExecutor(this, new PdhpdlOrderPlanner(new CAlgoSymbolModel(Symbol)));
-
-        foreach (PendingOrderRequestModel request in BuildOrderRequests()) {
-            // Entry and take-profit both set means the slot is in use. A missing stop-loss or risk
-            // percentage is rejected by the planner with a logged reason rather than silently skipped.
-            if (request.EntryPrice <= 0.0 || request.TakeProfitPrice <= 0.0)
-                continue;
-
-            orderExecutor.PlacePendingOrder(request);
+        // A blank label would make every "_L"/"_S" label on the symbol look like this bot's order.
+        if (string.IsNullOrWhiteSpace(OrderLabel)) {
+            Print("*****OrderLabel must not be empty. cBot stopped.");
+            Stop();
+            return;
         }
 
-        Print("*****MovingAverageV1 started.");
+        _optimisationWindowStart = Server.Time;
+        LaunchDebug();
+        DrawDualRmaLines();
+        _atr14 = new Atr14Series(Indicators, Bars);
+        _marketStructure = new MarketStructure(Chart, Bars, ZigZagLength);
+        _marketStructure.Update();
+        Bars dailyBars = MarketData.GetBars(TimeFrame.Daily, SymbolName);
+        Bars hourBars = MarketData.GetBars(TimeFrame.Hour, SymbolName);
+        _atrH1 = new Atr14Series(Indicators, hourBars);
+        _atrDaily = new Atr14Series(Indicators, dailyBars);
+        _dmsH1 = new Dms14Series(Indicators, hourBars);
+        var entryGate = new PivotEntryGate();
+        var lossCounter = new ConsecutiveLossCounter(Nlock);
+
+        // 快慢线与 ATR 同取趋势均线的那个 HTF 周期：GapXSeries 自己从 _rmaSeries.SourceBars 建 ATR。
+        var gapXSeries = new GapXSeries(Indicators, _rmaSeries, BuildGapXConfig());
+        _signalDetector = new PdhpdlSignalDetector(Bars, dailyBars, _rmaSeries, _marketStructure, entryGate, lossCounter, gapXSeries);
+        _signalMarkers = new PdhpdlSignalMarkers(Chart, Symbol.TickSize);
+
+        _csvLogger = new PdhpdlTradeCsvLogger(ResetTradeLogOnStart, ResolveReportsDirectory(), FileName);
+        Print("****CSV logger path: {0}", _csvLogger.FilePath);
+
+        var riskGuard = new PdhpdlRiskGuard(BuildRiskGuardConfig());
+        var planner = new PdhpdlOrderPlanner(new CAlgoSymbolModel(Symbol), riskGuard, StopOffsetTicks, TakeProfitR, EntryModel, RiskPct);
+        _orderExecutor = new PdhpdlOrderExecutor(this, SymbolName, Bars.TimeFrame.ToString(), OrderLabel.Trim(), planner, riskGuard,
+            _csvLogger, entryGate, lossCounter);
+        DrawPdhpdlLines();
+        Print("*****PDH/PDL Break and Reverse started.");
+    }
+
+    private void DrawDualRmaLines() {
+        DualRmaLinesConfigModel rmaConfig = BuildMovingAverageConfig();
+        _rmaSeries = new DualRmaSeries(MarketData, Indicators, SymbolName, Bars, rmaConfig);
+        _movingAverageLines = new DualRmaLines(Chart, Bars, _rmaSeries, rmaConfig.Thickness);
+        _movingAverageLines.Draw();
+    }
+
+    private void DrawPdhpdlLines() {
+        _pdhpdlLines = new PdhpdlLines(Chart, MarketData, SymbolName, Bars, 3);
+        _pdhpdlLines.Draw();
     }
 
     private void LaunchDebug() {
@@ -106,35 +161,105 @@ public class ManuallyTrade : Robot {
         }
     }
 
-    // Each slot has its own label, so the executor's duplicate check only blocks a restart from
-    // re-placing that same slot; slots never block each other.
-    private PendingOrderRequestModel[] BuildOrderRequests() {
-        const PdhpdlTradeDirectionModel Short = PdhpdlTradeDirectionModel.Short;
-        const PdhpdlTradeDirectionModel Long = PdhpdlTradeDirectionModel.Long;
-
-        return new[] {
-            OrderRequest(Short, "ManuallyTrade_Short1", Short1Price, Short1SLPrice, Short1TPPrice, Short1RiskPct),
-            OrderRequest(Short, "ManuallyTrade_Short2", Short2Price, Short2SLPrice, Short2TPPrice, Short2RiskPct),
-            OrderRequest(Short, "ManuallyTrade_Short3", Short3Price, Short3SLPrice, Short3TPPrice, Short3RiskPct),
-            OrderRequest(Long, "ManuallyTrade_Long1", Long1Price, Long1SLPrice, Long1TPPrice, Long1RiskPct),
-            OrderRequest(Long, "ManuallyTrade_Long2", Long2Price, Long2SLPrice, Long2TPPrice, Long2RiskPct),
-            OrderRequest(Long, "ManuallyTrade_Long3", Long3Price, Long3SLPrice, Long3TPPrice, Long3RiskPct)
+    private DualRmaLinesConfigModel BuildMovingAverageConfig() {
+        return new DualRmaLinesConfigModel {
+            Source = MaSource, FastPeriod = MaFastPeriod, SlowPeriod = MaSlowPeriod, HigherTimeFrameMinutes = MaTimeFrameMinutes
         };
     }
 
-    private static PendingOrderRequestModel OrderRequest(PdhpdlTradeDirectionModel direction, string label, double entryPrice,
-        double stopLossPrice, double takeProfitPrice, double riskPct) {
-        return new PendingOrderRequestModel {
-            Label = label,
-            Direction = direction,
-            EntryPrice = entryPrice,
-            StopLossPrice = stopLossPrice,
-            TakeProfitPrice = takeProfitPrice,
-            RiskPct = riskPct
+    // 输出目录按运行模式分开、互不覆盖：回测目录由脚本每次清空重建，模拟/实盘目录只追加、从不删除。
+    // 回测经 run_conditions 传入绝对路径 FileName，此目录会被忽略（见 PdhpdlTradeCsvLogger）。
+    private string ResolveReportsDirectory() {
+        string documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        return Path.Combine(documentsPath, ResolveReportsFolderName());
+    }
+
+    private string ResolveReportsFolderName() {
+        if (IsBacktesting)
+            return "trading_reports";
+
+        return Account.IsLive ? "release_trading_reports" : "simulate_trading_reports";
+    }
+
+    // 负阈值在这里就夹成 0：参数面板的 MinValue 管得住手输，管不住旧的参数集或优化器配置。
+    private PdhpdlGapXConfigModel BuildGapXConfig() {
+        return new PdhpdlGapXConfigModel { IsEnabled = UseGapX, Threshold = Math.Max(0.0, GapXThreshold) };
+    }
+
+    private PdhpdlRiskGuardConfigModel BuildRiskGuardConfig() {
+        return new PdhpdlRiskGuardConfigModel {
+            RiskSafetyFactor = RiskSafetyFactor,
+            MinStopLossPips = MinStopLossPips,
+            SaturdayForceCloseHour = SaturdayForceCloseHour,
+            SaturdayForceCloseMinute = SaturdayForceCloseMinute,
+            NewsBlackoutWindows = NewsBlackoutWindows
         };
+    }
+
+    protected override void OnBar() {
+        _pdhpdlLines?.Draw();
+        _movingAverageLines?.Draw();
+        _marketStructure?.Update();
+        _orderExecutor?.ManageOpenPositions();
+        // 先撤过期挂单再看新信号：让作废的挂单不再占住「本品种已有挂单」这个名额。
+        _orderExecutor?.CancelExpiredPendingOrders(Bars.Count - 2);
+        HandleClosedBarSignal();
+    }
+
+    protected override void OnTick() {
+        _orderExecutor?.ManageOpenPositions();
+    }
+
+    private void HandleClosedBarSignal() {
+        PdhpdlSignalModel signalModel = _signalDetector.DetectOnClosedBar(Strategy, BuyOrSellOnly);
+        if (!signalModel.HasData)
+            return;
+
+        signalModel.IsBigK = _atr14.IsBarRangeTooLarge(signalModel.BarIndex, signalModel.High, signalModel.Low, 3);
+        FillMarketState(signalModel);
+
+        if (_orderExecutor.ExecuteIfSignal(signalModel)) {
+            _signalMarkers.Draw(signalModel);
+        }
+    }
+
+    // 只记录、不参与判断的波动与趋势指标。数据不足（暖机期）时留 NaN，CSV 里写成空。
+    private void FillMarketState(PdhpdlSignalModel signalModel) {
+        signalModel.AtrRatioH1 = _atrH1.LastClosedRatio;
+        signalModel.PdRangeAtr = CalculatePdRangeAtr(signalModel);
+        signalModel.Adx14H1 = _dmsH1.LastClosedAdx;
+        signalModel.Adx14H1Previous = _dmsH1.PreviousClosedAdx;
+        signalModel.DiPlus14H1 = _dmsH1.LastClosedDiPlus;
+        signalModel.DiMinus14H1 = _dmsH1.LastClosedDiMinus;
+    }
+
+    // 日线 ATR 取的是与 PDH/PDL 同一根 K 线（上一根收盘日线），两者口径才对得上。
+    private double CalculatePdRangeAtr(PdhpdlSignalModel signalModel) {
+        double dailyAtr = _atrDaily.LastClosedValue;
+
+        if (double.IsNaN(dailyAtr))
+            return double.NaN;
+
+        return (signalModel.Pdh1 - signalModel.Pdl1) / dailyAtr;
     }
 
     protected override void OnStop() {
         Print("*****cBot stopped.*******************");
+    }
+
+    protected override void OnBarClosed() { }
+
+    // Called once per pass by the desktop Optimisation tab only — a plain backtest, CLI or GUI,
+    // never calls it. Passes with a losing (or idle) calendar year sink below every survivor;
+    // survivors keep cTrader's own score. See AnnualFitness.
+    protected override double GetFitness(GetFitnessArgs args) {
+        List<ClosedTradeModel> closedTrades = args.History
+            .Select(trade => new ClosedTradeModel(trade.ClosingTime, trade.NetProfit)).ToList();
+
+        var stats = new FitnessStatsModel {
+            NetProfit = args.NetProfit, WinningTrades = args.WinningTrades, MaxEquityDrawdownPercent = args.MaxEquityDrawdownPercentages
+        };
+
+        return new AnnualFitness(_optimisationWindowStart, Server.Time).Calculate(closedTrades, stats);
     }
 }
