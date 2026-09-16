@@ -34,7 +34,7 @@ public class ManuallyTrade : Robot {
     public double Short1RiskPct { get; set; }
 
     [Parameter("空1入场价", DefaultValue = 0, MinValue = 0, Group = "空1")]
-    public double Short1Price { get; set; }
+    public double PDH1 { get; set; }
 
     [Parameter("空1止盈目标", DefaultValue = 2.0, MinValue = 0.5, MaxValue = 20.0, Step = 0.1, Group = "空1")]
     public double Short1TPPrice { get; set; }
@@ -43,7 +43,7 @@ public class ManuallyTrade : Robot {
     public double Short2RiskPct { get; set; }
 
     [Parameter("空2入场价", DefaultValue = 0, MinValue = 0, Group = "空2")]
-    public double Short2Price { get; set; }
+    public double PDH2 { get; set; }
 
     [Parameter("空2止盈目标", DefaultValue = 2.0, MinValue = 0.5, MaxValue = 20.0, Step = 0.1, Group = "空2")]
     public double Short2TPPrice { get; set; }
@@ -52,7 +52,7 @@ public class ManuallyTrade : Robot {
     public double Short3RiskPct { get; set; }
 
     [Parameter("空3入场价", DefaultValue = 0, MinValue = 0, Group = "空3")]
-    public double Short3Price { get; set; }
+    public double PDH3 { get; set; }
 
     [Parameter("空3止盈目标", DefaultValue = 2.0, MinValue = 0.5, MaxValue = 20.0, Step = 0.1, Group = "空3")]
     public double Short3TPPrice { get; set; }
@@ -62,7 +62,7 @@ public class ManuallyTrade : Robot {
     public double Long1RiskPct { get; set; }
 
     [Parameter("多1入场价", DefaultValue = 0, MinValue = 0, Group = "多1")]
-    public double Long1Price { get; set; }
+    public double PDL1 { get; set; }
 
     [Parameter("多1止盈目标", DefaultValue = 2.0, MinValue = 0.5, MaxValue = 20.0, Step = 0.1, Group = "多1")]
     public double Long1TPPrice { get; set; }
@@ -72,7 +72,7 @@ public class ManuallyTrade : Robot {
     public double Long2RiskPct { get; set; }
 
     [Parameter("多2入场价", DefaultValue = 0, MinValue = 0, Group = "多2")]
-    public double Long2Price { get; set; }
+    public double PDL2 { get; set; }
 
     [Parameter("多2止盈目标", DefaultValue = 2.0, MinValue = 0.5, MaxValue = 20.0, Step = 0.1, Group = "多2")]
     public double Long2TPPrice { get; set; }
@@ -82,7 +82,7 @@ public class ManuallyTrade : Robot {
     public double Long3RiskPct { get; set; }
 
     [Parameter("多3入场价", DefaultValue = 0, MinValue = 0, Group = "多3")]
-    public double Long3Price { get; set; }
+    public double PDL3 { get; set; }
 
     [Parameter("多3止盈目标", DefaultValue = 2.0, MinValue = 0.5, MaxValue = 20.0, Step = 0.1, Group = "多3")]
     public double Long3TPPrice { get; set; }
