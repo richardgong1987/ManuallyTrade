@@ -7,7 +7,7 @@ namespace cAlgo.Robots;
 
 // C# port of the "Market Structure HH, HL, LH and LL" Pine indicator
 // (pine-script/lib/Market-Structure-HH-HL-LH-and-LL.pine). It draws the zigzag and its swing
-// labels; the only thing the strategy reads from it is LatestPivot.
+// labels; it is chart-only and feeds nothing back into the strategy.
 //
 // The swing engine is a breakout zigzag, not a fractal one:
 //     toUp   = this bar's high is the highest of the last zigZagLength bars
@@ -16,10 +16,9 @@ namespace cAlgo.Robots;
 // recorded at the moment of the flip. A leg therefore only appears once price has already
 // broken the other way; that lag is the indicator's design, not a porting artefact.
 public class MarketStructure {
-    // The Pine study exposes these as inputs. Only the zigzag length is passed in: it decides
-    // where a swing is confirmed, and LatestPivot / PivotCount gate every entry through
-    // PivotEntryGate, so it is real strategy behaviour. The rest are chart-only knobs and
-    // stay constants at their Pine defaults.
+    // The Pine study exposes these as inputs. Only the zigzag length is passed in, since it
+    // decides where a swing is confirmed. The rest are chart-only knobs and stay constants at
+    // their Pine defaults.
     private const int ZigZagWidth = 2;
     private const int LabelFontSize = 8; // Pine size.tiny
 
@@ -61,16 +60,6 @@ public class MarketStructure {
     private double _latestLow = double.NaN;
     private double _previousLow = double.NaN;
     private int _latestLowIndex = -1;
-
-    // 最近一次新确认的结构点，也就是图上最后画出来的那个标签：翻转向上确认的是低点（LL / HL），
-    // 翻转向下确认的是高点（HH / LH）。DrawSwing 每次翻转会把两个标签都重画一遍，但只有这一个是新的。
-    // 见 PivotEntryGate：每一笔入场都要靠它确认结构站在自己这一边。
-    public MarketStructurePivotModel LatestPivot { get; private set; }
-
-    // 到目前为止一共新确认过多少个结构点，只增不减 —— 相当于 LatestPivot 的编号。
-    // PivotEntryGate 靠「比上一笔入场时记下的值大」来确认这是新出的那一个：
-    // 同一个结构点只能放行一笔，光看 LatestPivot 的颜色区分不出新旧。
-    public int PivotCount { get; private set; }
 
     public MarketStructure(Chart chart, Bars bars, int zigZagLength) {
         if (zigZagLength < 1)
@@ -116,27 +105,17 @@ public class MarketStructure {
         // swing is ever recorded there.
         if (_hasPreviousTrend && trend != previousTrend) {
             // Flipping up confirms the low that ended the decline; flipping down confirms the high.
-            // LatestPivot 只在这里记，不在 DrawSwing 里：那边每次翻转都会把两边的标签重画一遍，
-            // 在那里记会把没动的那一侧也当成新的。判断式和 DrawSwing 的 isLowerLow / isHigherHigh
-            // 一致，所以它和图上标签的文字、颜色永远对得上。
             if (trend == 1) {
                 _previousLow = _latestLow;
                 _latestLow = swingLow;
                 _latestLowIndex = swingLowIndex;
-
-                LatestPivot = _latestLow < _previousLow ? MarketStructurePivotModel.LowerLow : MarketStructurePivotModel.HigherLow;
             }
 
             if (trend == -1) {
                 _previousHigh = _latestHigh;
                 _latestHigh = swingHigh;
                 _latestHighIndex = swingHighIndex;
-
-                LatestPivot = _latestHigh > _previousHigh ? MarketStructurePivotModel.HigherHigh : MarketStructurePivotModel.LowerHigh;
             }
-
-            // 一次翻转只确认一个结构点，所以这里加一次就够。
-            PivotCount++;
 
             DrawSwing(trend);
         }

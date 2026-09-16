@@ -15,12 +15,6 @@ public class ManuallyTrade : Robot {
     [Parameter("订单标签", DefaultValue = "ManuallyTrade-label")]
     public string OrderLabel { get; set; }
 
-    [Parameter("只作多或作空模式", DefaultValue = BuyOrSellOnlyModel.All)]
-    public BuyOrSellOnlyModel BuyOrSellOnly { get; set; }
-
-    [Parameter("N次止损Lock", DefaultValue = 3, Group = "风控配置")]
-    public int Nlock { get; set; }
-
     [Parameter("每笔交易风险百分比，默认1%", DefaultValue = 1.0, MinValue = 0.1, MaxValue = 10.0, Step = 0.1, Group = "风控配置")]
     public double RiskPct { get; set; }
 
@@ -81,13 +75,7 @@ public class ManuallyTrade : Robot {
     [Parameter("开口扩大阈值 GapX (ATR倍数)", DefaultValue = 0.10, MinValue = 0.0, Step = 0.05, Group = "均线")]
     public double GapXThreshold { get; set; }
 
-    // ZigZag 突破窗口：越大结构点越少、确认越慢，结构点令牌闸门也就越紧（见 PivotEntryGate）。
-    [Parameter("ZigZag 长度", DefaultValue = 16, MinValue = 1, Group = "市场结构")]
-    public int ZigZagLength { get; set; }
-
-
     private PdhpdlLines _pdhpdlLines;
-    private MarketStructure _marketStructure;
     private DualRmaSeries _rmaSeries;
     private DualRmaLines _movingAverageLines;
     private PdhpdlSignalDetector _signalDetector;
@@ -121,12 +109,10 @@ public class ManuallyTrade : Robot {
         _atrH1 = new Atr14Series(Indicators, hourBars);
         _atrDaily = new Atr14Series(Indicators, dailyBars);
         _dmsH1 = new Dms14Series(Indicators, hourBars);
-        var entryGate = new PivotEntryGate();
-        var lossCounter = new ConsecutiveLossCounter(Nlock);
 
         // 快慢线与 ATR 同取趋势均线的那个 HTF 周期：GapXSeries 自己从 _rmaSeries.SourceBars 建 ATR。
         var gapXSeries = new GapXSeries(Indicators, _rmaSeries, BuildGapXConfig());
-        _signalDetector = new PdhpdlSignalDetector(Bars, dailyBars, _rmaSeries, _marketStructure, entryGate, lossCounter, gapXSeries);
+        _signalDetector = new PdhpdlSignalDetector(Bars, dailyBars, _rmaSeries, gapXSeries);
         _signalMarkers = new PdhpdlSignalMarkers(Chart, Symbol.TickSize);
 
         _csvLogger = new PdhpdlTradeCsvLogger(ResetTradeLogOnStart, ResolveReportsDirectory(), FileName);
@@ -135,7 +121,7 @@ public class ManuallyTrade : Robot {
         var riskGuard = new PdhpdlRiskGuard(BuildRiskGuardConfig());
         var planner = new PdhpdlOrderPlanner(new CAlgoSymbolModel(Symbol), riskGuard, StopOffsetTicks, TakeProfitR, EntryModel, RiskPct);
         _orderExecutor = new PdhpdlOrderExecutor(this, SymbolName, Bars.TimeFrame.ToString(), OrderLabel.Trim(), planner, riskGuard,
-            _csvLogger, entryGate, lossCounter);
+            _csvLogger);
         DrawPdhpdlLines();
         Print("*****PDH/PDL Break and Reverse started.");
     }
@@ -211,7 +197,7 @@ public class ManuallyTrade : Robot {
     }
 
     private void HandleClosedBarSignal() {
-        PdhpdlSignalModel signalModel = _signalDetector.DetectOnClosedBar(Strategy, BuyOrSellOnly);
+        PdhpdlSignalModel signalModel = _signalDetector.DetectOnClosedBar(Strategy);
         if (!signalModel.HasData)
             return;
 

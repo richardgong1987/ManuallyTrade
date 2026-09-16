@@ -26,19 +26,14 @@ public class PdhpdlOrderExecutor {
     private readonly PdhpdlRiskGuard _riskGuard;
     private readonly PdhpdlTradeCsvLogger _csvLogger;
 
-    // 连亏锁仓。上锁/解锁的状态机在它自己里面，这里只负责喂平仓结果、以及开单前问一句锁没锁。
-    private readonly PivotEntryGate _entryGate;
-    private readonly ConsecutiveLossCounter _lossCounter;
-
     private readonly Dictionary<string, string> _pendingCsvIdsByLabel = new();
     private readonly Dictionary<string, double> _pendingEntryEquitiesByLabel = new();
     private readonly Dictionary<int, int> _pendingOrderBarIndexById = new();
     private readonly Dictionary<int, string> _positionCsvIds = new();
     private readonly Dictionary<int, double> _positionEntryEquities = new();
-    private readonly Dictionary<string, EntryGateSnapshot> _pendingGateSnapshotsByLabel = new();
 
     public PdhpdlOrderExecutor(Robot robot, string symbolName, string timeFrame, string orderLabel, PdhpdlOrderPlanner planner,
-        PdhpdlRiskGuard riskGuard, PdhpdlTradeCsvLogger csvLogger, PivotEntryGate entryGate, ConsecutiveLossCounter lossCounter) {
+        PdhpdlRiskGuard riskGuard, PdhpdlTradeCsvLogger csvLogger) {
         _robot = robot;
         _symbolName = symbolName;
         _timeFrame = timeFrame;
@@ -46,8 +41,6 @@ public class PdhpdlOrderExecutor {
         _planner = planner;
         _riskGuard = riskGuard;
         _csvLogger = csvLogger;
-        _entryGate = entryGate;
-        _lossCounter = lossCounter;
 
         if (_riskGuard.NewsBlackoutWindowCount > 0)
             _robot.Print("*****News blackout windows loaded. Count: {0}", _riskGuard.NewsBlackoutWindowCount);
@@ -103,14 +96,7 @@ public class PdhpdlOrderExecutor {
         planModel.GapExpansionX3Bar = signalModel.GapExpansionX3Bar;
         planModel.GapExpansionX1Bar = signalModel.GapExpansionX1Bar;
 
-        // 快照必须在下单之前放好：市价单的 Positions.Opened 可能在 SubmitOrder 里就回调了。
-        _pendingGateSnapshotsByLabel[planModel.Label] = new EntryGateSnapshot(planModel.DirectionModel, signalModel.PivotCount);
-
-        if (ExecutePlan(planModel))
-            return true;
-
-        _pendingGateSnapshotsByLabel.Remove(planModel.Label);
-        return false;
+        return ExecutePlan(planModel);
     }
 
     // Checks live broker state rather than in-memory maps, so a restart does not stack a second order.
@@ -167,7 +153,6 @@ public class PdhpdlOrderExecutor {
 
         _pendingCsvIdsByLabel.Remove(order.Label);
         _pendingEntryEquitiesByLabel.Remove(order.Label);
-        _pendingGateSnapshotsByLabel.Remove(order.Label);
     }
 
     private void CloseExposureBeforeRiskWindow() {
@@ -258,30 +243,6 @@ public class PdhpdlOrderExecutor {
             _positionEntryEquities[args.Position.Id] = entryEquity;
             _pendingEntryEquitiesByLabel.Remove(args.Position.Label);
         }
-
-        RecordEntryForGate(args.Position.Label);
-    }
-
-    // 仓位真正开出来才算吃掉一个令牌。用的是下单那一刻的结构点编号，也就是闸门放行时比对过的
-    // 那个基准，这样「一个结构点放行一笔」才对得上：挂单成交时可能又新出了几个结构点，
-    // 拿成交那一刻的编号记账会把它们一并当成已经用掉。
-    private void RecordEntryForGate(string label) {
-        if (string.IsNullOrWhiteSpace(label) || !_pendingGateSnapshotsByLabel.TryGetValue(label, out EntryGateSnapshot snapshot))
-            return;
-
-        _pendingGateSnapshotsByLabel.Remove(label);
-        _entryGate.RecordEntry(snapshot.Direction, snapshot.PivotCount);
-        _robot.Print("*****Entry recorded | Side: {0}, PivotCount: {1}", snapshot.Direction, snapshot.PivotCount);
-    }
-
-    private readonly struct EntryGateSnapshot {
-        public EntryGateSnapshot(PdhpdlTradeDirectionModel direction, int pivotCount) {
-            Direction = direction;
-            PivotCount = pivotCount;
-        }
-
-        public PdhpdlTradeDirectionModel Direction { get; }
-        public int PivotCount { get; }
     }
 
     private void OnPositionClosed(PositionClosedEventArgs args) {
@@ -299,10 +260,6 @@ public class PdhpdlOrderExecutor {
 
         if (!string.IsNullOrWhiteSpace(closeRecordId))
             _robot.Print("*****CSV close record added. Id: {0}, ProfitLoss: {1}", closeRecordId, args.Position.NetProfit);
-
-        _lossCounter.RecordClosedTrade(args.Position.NetProfit);
-        _robot.Print("*****Consecutive losses | Count: {0}, PivotGateRequired: {1}", _lossCounter.ConsecutiveLosses,
-            _lossCounter.IsPivotGateRequired);
     }
 
     private bool IsStrategyPosition(Position position) {

@@ -7,33 +7,21 @@ public class PdhpdlSignalDetector {
     private readonly Bars _chartBars;
     private readonly Bars _dailyBars;
     private readonly DualRmaSeries _rmaSeries;
-    private readonly MarketStructure _marketStructure;
-    private readonly PivotEntryGate _entryGate;
-    private readonly ConsecutiveLossCounter _lossCounter;
     private readonly GapXSeries _gapXSeries;
 
-    private DateTime _levelsDayOpenTime = DateTime.MinValue;
-
-    public PdhpdlSignalDetector(Bars chartBars, Bars dailyBars, DualRmaSeries rmaSeries, MarketStructure marketStructure,
-        PivotEntryGate entryGate, ConsecutiveLossCounter lossCounter, GapXSeries gapXSeries) {
+    public PdhpdlSignalDetector(Bars chartBars, Bars dailyBars, DualRmaSeries rmaSeries, GapXSeries gapXSeries) {
         _chartBars = chartBars;
         _dailyBars = dailyBars;
         _rmaSeries = rmaSeries;
-        _marketStructure = marketStructure;
-        _entryGate = entryGate;
-        _lossCounter = lossCounter;
         _gapXSeries = gapXSeries;
     }
 
-    public PdhpdlSignalModel DetectOnClosedBar(StrategyModel strategy, BuyOrSellOnlyModel buyOrSellOnly) {
+    public PdhpdlSignalModel DetectOnClosedBar(StrategyModel strategy) {
         PdhpdlSignalModel signalModel = new();
         signalModel.Strategy = strategy;
-        signalModel.BuyOrSellOnly = buyOrSellOnly;
 
         if (_chartBars.Count < 2 || !TryGetPreviousDayLevels(out double pdh, out double pdl))
             return signalModel;
-
-        ResetLossStreakOnNewLevels();
 
         int closedBarIndex = _chartBars.Count - 2; // last fully closed bar in OnBar()
         CandleModel current = ReadCandle(closedBarIndex);
@@ -52,15 +40,12 @@ public class PdhpdlSignalDetector {
 
         signalModel.Pdl1 = pdl;
 
-        signalModel.LatestPivot = _marketStructure.LatestPivot;
-        signalModel.PivotCount = _marketStructure.PivotCount;
-
         FillRmaData(signalModel);
 
         // GapX 是进场条件之一，必须在 Evaluate 之前就位。
         _gapXSeries.Fill(signalModel);
 
-        MainBiz.Evaluate(signalModel, current, previous, earlier, _entryGate, _lossCounter);
+        MainBiz.Evaluate(signalModel, current, previous, earlier);
 
         return signalModel;
     }
@@ -81,19 +66,6 @@ public class PdhpdlSignalDetector {
         signalModel.RmaSourceBarTime = sourceBarTime;
         signalModel.FastRma = fastRma;
         signalModel.SlowRma = slowRma;
-    }
-
-    // 关键位换到新的一天就把连亏计数清零：亏损是对着昨天那对 PDH/PDL 累出来的，不该带进
-    // 新的一对，否则新的一天一开盘结构点闸门就已经被顶开着（见 ConsecutiveLossCounter）。
-    // 调用点在关键位就位之后、评估信号之前，所以当天开出来的仓位不会被这里清掉。
-    private void ResetLossStreakOnNewLevels() {
-        DateTime dayOpenTime = _dailyBars.OpenTimes[PreviousDailyIndex];
-
-        if (dayOpenTime == _levelsDayOpenTime)
-            return;
-
-        _levelsDayOpenTime = dayOpenTime;
-        _lossCounter.Reset();
     }
 
     private int PreviousDailyIndex => _dailyBars.Count - 2;
