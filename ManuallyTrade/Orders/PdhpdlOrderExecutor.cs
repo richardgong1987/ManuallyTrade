@@ -87,14 +87,6 @@ public class PdhpdlOrderExecutor {
         planModel.SignalName = signalModel.Label;
         planModel.KeyLevel = signalModel.KeyLevel;
         planModel.SignalBarIndex = signalModel.BarIndex;
-        planModel.AtrRatioH1 = signalModel.AtrRatioH1;
-        planModel.PdRangeAtr = signalModel.PdRangeAtr;
-        planModel.Adx14H1 = signalModel.Adx14H1;
-        planModel.Adx14H1Previous = signalModel.Adx14H1Previous;
-        planModel.DiPlus14H1 = signalModel.DiPlus14H1;
-        planModel.DiMinus14H1 = signalModel.DiMinus14H1;
-        planModel.GapExpansionX3Bar = signalModel.GapExpansionX3Bar;
-        planModel.GapExpansionX1Bar = signalModel.GapExpansionX1Bar;
 
         return ExecutePlan(planModel);
     }

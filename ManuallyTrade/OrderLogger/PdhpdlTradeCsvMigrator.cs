@@ -8,17 +8,16 @@ namespace cAlgo.Robots;
 // history of older layouts (fewer columns, equity columns in different positions, per-pullback
 // entry-mode columns) and rewrites old rows in place. Pure string work, no cAlgo dependency.
 public static class PdhpdlTradeCsvMigrator {
-    private const int CurrentColumnCount = 30;
-    // GapX_1Bar 一列加入之前的 schema（那时 GapX_3Bar 还叫 GapX，位置没变，只需补列）。
-    private const int ColumnCountBeforeShortGapX = 29;
-    // GapX 一列加入之前的 schema。
-    private const int ColumnCountBeforeGapX = 28;
-    // ADX14_H1_Previous 一列加入之前的 schema。
-    private const int ColumnCountBeforeAdxPreviousState = 27;
-    // ADX14_H1 / DI+14_H1 / DI-14_H1 三列加入之前的 schema。
-    private const int ColumnCountBeforeDmsState = 24;
-    // ATR_Ratio_H1 / PD_Range_ATR 两列加入之前的 schema。这两种旧行都只需在末尾补空列。
-    private const int ColumnCountBeforeAtrState = 22;
+    // 波动/趋势状态列（ATR_Ratio_H1 起的那一串）已全部废弃，当前 schema 回到它们加入之前的 22 列。
+    private const int CurrentColumnCount = 22;
+
+    // 曾经在末尾带过那些状态列的历史 schema。列序从未变过，截掉末尾多出来的部分即可回到当前布局。
+    // 24 列同时也是更早的 OldColumnCountBeforeSingleTakeProfit 布局，只能靠表头区分（见 MigrateRows）。
+    private const int ColumnCountWithAtrState = 24;
+    private const int ColumnCountWithDmsState = 27;
+    private const int ColumnCountWithAdxPreviousState = 28;
+    private const int ColumnCountWithGapX = 29;
+    private const int ColumnCountWithShortGapX = 30;
     // "多空"(Side) 列移除之前的旧 schema：所有历史布局的第 1 列（索引 SideColumnIndex）都是 Side。
     private const int ColumnCountWithSide = 23;
     private const int PreviousColumnCount = 26;
@@ -75,35 +74,28 @@ public static class PdhpdlTradeCsvMigrator {
             if (columns.Length == CurrentColumnCount)
                 continue;
 
-            // 只在末尾追加过列的两个近期 schema：补空列即可，列序没有变过。
+            // 末尾带着已废弃状态列的近期 schema：截掉多出来的部分即可，前 22 列的列序没有变过。
             // 24 列同时也是更早的 OldColumnCountBeforeSingleTakeProfit 布局，所以要看表头。
-            if (columns.Length == ColumnCountBeforeAtrState || columns.Length == ColumnCountBeforeAdxPreviousState ||
-                columns.Length == ColumnCountBeforeGapX || columns.Length == ColumnCountBeforeShortGapX ||
-                (columns.Length == ColumnCountBeforeDmsState && isHeaderBeforeDmsState)) {
-                lines[i] = string.Join(",", AppendEmptyColumns(columns, CurrentColumnCount));
+            if (columns.Length == ColumnCountWithDmsState || columns.Length == ColumnCountWithAdxPreviousState ||
+                columns.Length == ColumnCountWithGapX || columns.Length == ColumnCountWithShortGapX ||
+                (columns.Length == ColumnCountWithAtrState && isHeaderBeforeDmsState)) {
+                lines[i] = string.Join(",", TrimToCurrentColumns(columns));
                 continue;
             }
 
             string[] withSide = NormalizeToWithSideLayout(columns, isPreviousWithSideHeader);
 
             // 只有成功归一到 "含 Side 的 23 列布局" 才剥离 Side 列；无法识别长度的行保持原样，
-            // 与旧逻辑一致（旧代码对未命中任何分支的行也不改动）。
+            // 与旧逻辑一致（旧代码对未命中任何分支的行也不改动）。剥离后正好是当前的 22 列。
             if (withSide.Length == ColumnCountWithSide)
-                lines[i] = string.Join(",", AppendEmptyColumns(RemoveSideColumn(withSide), CurrentColumnCount));
+                lines[i] = string.Join(",", RemoveSideColumn(withSide));
         }
     }
 
-    private static string[] AppendEmptyColumns(string[] columns, int targetColumnCount) {
-        if (columns.Length >= targetColumnCount)
-            return columns;
-
-        string[] padded = new string[targetColumnCount];
-        Array.Copy(columns, padded, columns.Length);
-
-        for (int i = columns.Length; i < targetColumnCount; i++)
-            padded[i] = "";
-
-        return padded;
+    private static string[] TrimToCurrentColumns(string[] columns) {
+        string[] trimmed = new string[CurrentColumnCount];
+        Array.Copy(columns, trimmed, CurrentColumnCount);
+        return trimmed;
     }
 
     // 把任意历史布局归一到 "含 Side 的 23 列布局"，随后由 RemoveSideColumn 统一剥离 Side。

@@ -83,11 +83,6 @@ public class ManuallyTrade : Robot {
     private PdhpdlOrderExecutor _orderExecutor;
     private PdhpdlTradeCsvLogger _csvLogger;
     private Atr14Series _atr14;
-
-    // 只为写进 CSV 的市场状态：H1 的 ATR 状态值与 DMI，日线 ATR（用于 PD_Range_ATR）。
-    private Atr14Series _atrH1;
-    private Atr14Series _atrDaily;
-    private Dms14Series _dmsH1;
     private DateTime _optimisationWindowStart;
 
     protected override void OnStart() {
@@ -103,10 +98,6 @@ public class ManuallyTrade : Robot {
         DrawDualRmaLines();
         _atr14 = new Atr14Series(Indicators, Bars);
         Bars dailyBars = MarketData.GetBars(TimeFrame.Daily, SymbolName);
-        Bars hourBars = MarketData.GetBars(TimeFrame.Hour, SymbolName);
-        _atrH1 = new Atr14Series(Indicators, hourBars);
-        _atrDaily = new Atr14Series(Indicators, dailyBars);
-        _dmsH1 = new Dms14Series(Indicators, hourBars);
 
         // 快慢线与 ATR 同取趋势均线的那个 HTF 周期：GapXSeries 自己从 _rmaSeries.SourceBars 建 ATR。
         var gapXSeries = new GapXSeries(Indicators, _rmaSeries, BuildGapXConfig());
@@ -199,31 +190,10 @@ public class ManuallyTrade : Robot {
             return;
 
         signalModel.IsBigK = _atr14.IsBarRangeTooLarge(signalModel.BarIndex, signalModel.High, signalModel.Low, 3);
-        FillMarketState(signalModel);
 
         if (_orderExecutor.ExecuteIfSignal(signalModel)) {
             _signalMarkers.Draw(signalModel);
         }
-    }
-
-    // 只记录、不参与判断的波动与趋势指标。数据不足（暖机期）时留 NaN，CSV 里写成空。
-    private void FillMarketState(PdhpdlSignalModel signalModel) {
-        signalModel.AtrRatioH1 = _atrH1.LastClosedRatio;
-        signalModel.PdRangeAtr = CalculatePdRangeAtr(signalModel);
-        signalModel.Adx14H1 = _dmsH1.LastClosedAdx;
-        signalModel.Adx14H1Previous = _dmsH1.PreviousClosedAdx;
-        signalModel.DiPlus14H1 = _dmsH1.LastClosedDiPlus;
-        signalModel.DiMinus14H1 = _dmsH1.LastClosedDiMinus;
-    }
-
-    // 日线 ATR 取的是与 PDH/PDL 同一根 K 线（上一根收盘日线），两者口径才对得上。
-    private double CalculatePdRangeAtr(PdhpdlSignalModel signalModel) {
-        double dailyAtr = _atrDaily.LastClosedValue;
-
-        if (double.IsNaN(dailyAtr))
-            return double.NaN;
-
-        return (signalModel.Pdh1 - signalModel.Pdl1) / dailyAtr;
     }
 
     protected override void OnStop() {

@@ -11,9 +11,6 @@ public class GapXSeries {
     //（它的参数按 15 分钟 K 线计数，默认 12 根 = 180 分钟，换算到它 60 分钟的均线周期正好 3 根）。
     public const int GateLookbackBars = 3;
 
-    // 只写进 CSV、用来和上面那个窗口比分辨力的短窗口，不参与闸门判断。
-    public const int ShortLookbackBars = 1;
-
     private readonly DualRmaSeries _rmaSeries;
     private readonly Atr14Series _sourceAtr14;
     private readonly PdhpdlGapXConfigModel _config;
@@ -24,11 +21,10 @@ public class GapXSeries {
         _config = config;
     }
 
-    // 把两个窗口的 GapX 和闸门设置一起放到信号上：MainBiz 只读信号，不认识指标序列。
+    // 把 GapX 和闸门设置一起放到信号上：MainBiz 只读信号，不认识指标序列。
     // 必须在 MainBiz.Evaluate 之前调用。
     public void Fill(PdhpdlSignalModel signalModel) {
         signalModel.GapExpansionX3Bar = Calculate(GateLookbackBars);
-        signalModel.GapExpansionX1Bar = Calculate(ShortLookbackBars);
         signalModel.UseGapX = _config.IsEnabled;
         signalModel.GapXThreshold = _config.Threshold;
     }
