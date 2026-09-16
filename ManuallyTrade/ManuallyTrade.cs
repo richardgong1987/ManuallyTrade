@@ -12,19 +12,8 @@ public class ManuallyTrade : Robot {
     [Parameter("订单标签", DefaultValue = "ManuallyTrade-label")]
     public string OrderLabel { get; set; }
 
-    [Parameter("启动时清空交易记录CSV", DefaultValue = false, Group = "开发调试")]
-    public bool ResetTradeLogOnStart { get; set; }
 
-    [Parameter("展示调试日志", DefaultValue = false, Group = "开发调试")]
-    public bool ShowDebugLogs { get; set; }
-
-    [Parameter("debug调试", DefaultValue = false, Group = "开发调试")]
-    public bool IsDebug { get; set; }
-
-    [Parameter("输出文件名", DefaultValue = "ManuallyTrades.csv", Group = "开发调试")]
-    public string FileName { get; set; }
-
-    [Parameter("空1风险1%", DefaultValue = 0, MinValue = 0, Group = "空1")]
+    [Parameter("空1风险1%", DefaultValue = 1, MinValue = 0, Group = "空1")]
     public double Short1RiskPct { get; set; }
 
     [Parameter("空1入场价", DefaultValue = 0, MinValue = 0, Group = "空1")]
@@ -80,6 +69,15 @@ public class ManuallyTrade : Robot {
 
     [Parameter("多3止盈目标", DefaultValue = 2.0, MinValue = 0.5, MaxValue = 20.0, Step = 0.1, Group = "多3")]
     public double Long3TPPrice { get; set; }
+
+    [Parameter("启动时清空交易记录CSV", DefaultValue = false, Group = "开发调试")]
+    public bool ResetTradeLogOnStart { get; set; }
+
+    [Parameter("debug调试", DefaultValue = false, Group = "开发调试")]
+    public bool IsDebug { get; set; }
+
+    [Parameter("输出文件名", DefaultValue = "ManuallyTrades.csv", Group = "开发调试")]
+    public string FileName { get; set; }
 
     private PdhpdlLines _pdhpdlLines;
     private PdhpdlSignalDetector _signalDetector;
