@@ -108,7 +108,10 @@ public class ManuallyTrade : Robot {
         var planner = new PdhpdlOrderPlanner(new CAlgoSymbolModel(Symbol), riskGuard);
         _orderExecutor = new PdhpdlOrderExecutor(this, SymbolName, Bars.TimeFrame.ToString(), OrderLabel.Trim(), planner, riskGuard,
             _csvLogger);
-        DrawPdhpdlLines();
+
+        _pdhpdlLines = new PdhpdlLines(Chart, tradeLevels);
+        _pdhpdlLines.Draw();
+
         Print("*****PDH/PDL Break and Reverse started.");
     }
 
@@ -133,11 +136,6 @@ public class ManuallyTrade : Robot {
 
         if (!tradeLevels.Any(level => level.IsConfigured))
             Print("*****No trade level configured. Set both 入场价 and 风险% on at least one level, or this cBot will never trade.");
-    }
-
-    private void DrawPdhpdlLines() {
-        _pdhpdlLines = new PdhpdlLines(Chart, MarketData, SymbolName, Bars, 3);
-        _pdhpdlLines.Draw();
     }
 
     private void LaunchDebug() {

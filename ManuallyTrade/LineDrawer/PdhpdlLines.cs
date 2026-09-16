@@ -1,89 +1,32 @@
-using System;
 using System.Collections.Generic;
+using System.Linq;
 using cAlgo.API;
-using cAlgo.API.Internals;
 
 namespace cAlgo.Robots;
 
+// 把手工配置的六档价位画成贯穿全图的水平线：空档（PDH1~3）绿色，多档（PDL1~3）红色。
+// 留 0 没启用的档不画。
 public class PdhpdlLines {
-    private const string Prefix = "PDH_PDL_STEP_";
+    private const string Prefix = "PDH_PDL_LEVEL_";
+    private const int Thickness = 2;
+    private const int LabelFontSize = 9;
 
     private readonly Chart _chart;
-    private readonly Bars _dailyBars;
+    private readonly List<TradeLevelModel> _tradeLevels;
     private readonly List<string> _objectNames = new();
 
-    private readonly int _daysToDraw;
-    private readonly int _thickness;
-
-    private DateTime _lastDailyOpenTime = DateTime.MinValue;
-
-    public PdhpdlLines(Chart chart, MarketData marketData, string symbolName, Bars chartBars, int thickness) {
+    public PdhpdlLines(Chart chart, IEnumerable<TradeLevelModel> tradeLevels) {
         _chart = chart;
-        _dailyBars = marketData.GetBars(TimeFrame.Daily, symbolName);
-        _daysToDraw = GetDaysToDraw(chartBars);
-        _thickness = thickness;
+        _tradeLevels = tradeLevels.Where(level => level.IsConfigured).ToList();
     }
 
-    // Draw one extra day of headroom on each side of the visible chart range.
-    private static int GetDaysToDraw(Bars chartBars) {
-        if (chartBars.Count < 2)
-            return 2;
-
-        DateTime start = chartBars.OpenTimes[0].Date;
-        DateTime end = chartBars.OpenTimes[chartBars.Count - 1].Date;
-        return Math.Max(2, (end - start).Days + 2);
-    }
-
+    // 线本身是无限长的，不用重画；重画只是把名字挪到最新一根 K 线那边，跟着行情走。
     public void Draw() {
-        if (_dailyBars.Count < 2)
-            return;
-
-        DateTime currentDailyOpenTime = _dailyBars.OpenTimes[_dailyBars.Count - 1];
-
-        if (currentDailyOpenTime == _lastDailyOpenTime)
-            return;
-
-        _lastDailyOpenTime = currentDailyOpenTime;
-
         Clear();
 
-        int startIndex = Math.Max(1, _dailyBars.Count - _daysToDraw);
-
-        for (int i = startIndex; i < _dailyBars.Count; i++) {
-            DateTime startTime = _dailyBars.OpenTimes[i];
-
-            DateTime endTime = i + 1 < _dailyBars.Count ? _dailyBars.OpenTimes[i + 1] : startTime.AddDays(1);
-
-            double pdh = _dailyBars.HighPrices[i - 1];
-            double pdl = _dailyBars.LowPrices[i - 1];
-
-            string dateKey = startTime.ToString("yyyyMMdd");
-
-            DrawSegment($"{Prefix}PDH_{dateKey}", startTime, endTime, pdh, Color.Red);
-
-            DrawSegment($"{Prefix}PDL_{dateKey}", startTime, endTime, pdl, Color.Lime);
-
-            if (i > startIndex && i > 1) {
-                double previousPdh = _dailyBars.HighPrices[i - 2];
-                double previousPdl = _dailyBars.LowPrices[i - 2];
-
-                DrawVerticalConnector($"{Prefix}PDH_CONNECTOR_{dateKey}", startTime, previousPdh, pdh, Color.Red);
-
-                DrawVerticalConnector($"{Prefix}PDL_CONNECTOR_{dateKey}", startTime, previousPdl, pdl, Color.Lime);
-            }
+        foreach (TradeLevelModel level in _tradeLevels) {
+            DrawLevel(level);
         }
-    }
-
-    private void DrawSegment(string name, DateTime startTime, DateTime endTime, double price, Color color) {
-        _chart.DrawTrendLine(name, startTime, price, endTime, price, color, _thickness, LineStyle.Solid);
-
-        _objectNames.Add(name);
-    }
-
-    private void DrawVerticalConnector(string name, DateTime time, double fromPrice, double toPrice, Color color) {
-        _chart.DrawTrendLine(name, time, fromPrice, time, toPrice, color, _thickness, LineStyle.Solid);
-
-        _objectNames.Add(name);
     }
 
     public void Clear() {
@@ -92,5 +35,29 @@ public class PdhpdlLines {
         }
 
         _objectNames.Clear();
+    }
+
+    private void DrawLevel(TradeLevelModel level) {
+        string label = GetLabel(level);
+        Color color = level.Side == SignalSideModel.Sell ? Color.Lime : Color.Red;
+
+        string lineName = $"{Prefix}{label}";
+        string textName = $"{Prefix}TEXT_{label}";
+
+        _chart.DrawHorizontalLine(lineName, level.Price, color, Thickness, LineStyle.Solid);
+
+        ChartText text = _chart.DrawText(textName, label, _chart.BarsTotal - 1, level.Price, color);
+        text.FontSize = LabelFontSize;
+        text.VerticalAlignment = VerticalAlignment.Bottom;
+        text.HorizontalAlignment = HorizontalAlignment.Right;
+
+        _objectNames.Add(lineName);
+        _objectNames.Add(textName);
+    }
+
+    // 配置里的档位名是 Short1/Long1，图上按交易习惯显示成 PDH1/PDL1。
+    private static string GetLabel(TradeLevelModel level) {
+        string prefix = level.Side == SignalSideModel.Sell ? "PDH" : "PDL";
+        return prefix + level.Name[level.Name.Length - 1];
     }
 }
