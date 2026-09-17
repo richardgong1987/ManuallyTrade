@@ -108,6 +108,7 @@ public class ManuallyTrade : Robot {
         var planner = new PdhpdlOrderPlanner(new CAlgoSymbolModel(Symbol), riskGuard);
         _orderExecutor = new PdhpdlOrderExecutor(this, SymbolName, Bars.TimeFrame.ToString(), OrderLabel.Trim(), planner, riskGuard,
             _csvLogger);
+        CancelPendingOrdersOfClearedLevels(tradeLevels);
 
         _pdhpdlLines = new PdhpdlLines(Chart, tradeLevels);
         _pdhpdlLines.Draw();
@@ -136,6 +137,14 @@ public class ManuallyTrade : Robot {
 
         if (!tradeLevels.Any(level => level.IsConfigured))
             Print("*****No trade level configured. Set both 入场价 and 风险% on at least one level, or this cBot will never trade.");
+    }
+
+    // Setting a level's entry price to 0 withdraws that level: its unfilled orders are cancelled,
+    // while positions that already filled keep running with their own stop loss and take profit.
+    private void CancelPendingOrdersOfClearedLevels(List<TradeLevelModel> tradeLevels) {
+        foreach (TradeLevelModel level in tradeLevels.Where(level => level.Price <= 0.0)) {
+            _orderExecutor.CancelPendingOrdersForLevel(level.Name);
+        }
     }
 
     private void LaunchDebug() {
