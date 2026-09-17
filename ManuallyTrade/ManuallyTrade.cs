@@ -7,7 +7,7 @@ using cAlgo.API;
 
 namespace cAlgo.Robots;
 
-[Robot(TimeZone = TimeZones.TokyoStandardTime, AccessRights = AccessRights.FullAccess, AddIndicators = false)]
+[Robot(TimeZone = TimeZones.TokyoStandardTime, AccessRights = AccessRights.None, AddIndicators = false)]
 public class ManuallyTrade : Robot {
     [Parameter("订单标签", DefaultValue = "ManuallyTrade-label")]
     public string OrderLabel { get; set; }
