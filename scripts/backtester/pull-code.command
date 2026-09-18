@@ -6,7 +6,7 @@ SOLUTION="$REPO_ROOT/ManuallyTrade.sln"
 cd $REPO_ROOT
 
 git pull --all
-git reset --hard origin/master
+git reset --hard origin/main
 
 dotnet build "$SOLUTION" -c Release
 
